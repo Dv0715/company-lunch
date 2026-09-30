@@ -36,6 +36,7 @@ async function submitPassword(){
   if(expected==="HASH_HERE"){msg.textContent="尚未設定管理密碼。請先到 Supabase 的 app_settings 設定 hash。";return}
   if(await hashPassword(password)!==expected){msg.textContent="密碼錯誤";return}
   editMode=true;
+  document.getElementById("addRestaurantBtn").classList.remove("hidden");
   closeModal();
   document.getElementById("editBanner").classList.remove("hidden");
   document.getElementById("editModeBtn").textContent="🔓 編輯模式";
@@ -44,6 +45,7 @@ async function submitPassword(){
 }
 function lockEditMode(){
  editMode=false;
+ document.getElementById("addRestaurantBtn").classList.add("hidden");
  document.getElementById("editBanner").classList.add("hidden");
  document.getElementById("editModeBtn").textContent="🔐 編輯模式";
  render();
@@ -90,6 +92,7 @@ async function addNote(id){if(!requireEdit())return;const text=document.getEleme
 async function deleteNote(nid,rid){if(!requireEdit())return;if(!confirm("刪除這張小紙條？"))return;const {error}=await db.from("notes").delete().eq("id",nid);if(error)alert(error.message);else openRestaurant(rid)}
 async function addImages(id,files){if(!requireEdit())return;for(const file of [...files]){if(file.size>6*1024*1024){alert(`${file.name} 超過 6MB，請先縮小圖片。`);continue}const ext=(file.name.split(".").pop()||"jpg").toLowerCase(), path=`${id}/${crypto.randomUUID()}.${ext}`;const up=await db.storage.from("menus").upload(path,file,{contentType:file.type||"image/jpeg"});if(up.error){alert(up.error.message);continue}const {data}=db.storage.from("menus").getPublicUrl(path);const ins=await db.from("menu_images").insert({restaurant_id:id,storage_path:path,public_url:data.publicUrl});if(ins.error)alert(ins.error.message)}openRestaurant(id)}
 function openRestaurantForm(existing=null){
+  if(!requireEdit())return;
  const r=existing||{name:"",category:"",address:"",phone:"",closed_days:[],open_time:"",close_time:"",tags:[]};
  openModal(`<h2>${existing?"編輯餐廳":"新增餐廳"}</h2><div class="form-row"><label>餐廳名稱</label><input id="fName" value="${esc(r.name)}"></div><div class="form-row"><label>類型</label><input id="fCategory" value="${esc(r.category)}" placeholder="便當、麵店、飲料…"></div><div class="form-row"><label>地址</label><input id="fAddress" value="${esc(r.address)}"></div><div class="form-row"><label>電話</label><input id="fPhone" value="${esc(r.phone)}"></div><div class="form-row"><label>公休日</label><div class="days">${dayNames.map((d,i)=>`<label><input class="daybox" type="checkbox" value="${i}" ${(r.closed_days||[]).includes(i)?"checked":""}> 星期${d}</label>`).join("")}</div></div><div class="form-row"><label>營業時間</label><div class="inline"><input id="fOpen" type="time" value="${esc(r.open_time)}"><input id="fClose" type="time" value="${esc(r.close_time)}"></div></div><div class="form-row"><label>標籤（逗號分隔）</label><input id="fTags" value="${esc((r.tags||[]).join(","))}" placeholder="水餃,便宜,適合一個人"></div><button class="primary" onclick="saveRestaurant('${existing?existing.id:""}')">儲存</button>`);
 }
