@@ -1,5 +1,5 @@
 const {createClient}=window.supabase;
-const supabase=createClient(window.SUPABASE_URL,window.SUPABASE_PUBLISHABLE_KEY);
+const db=createClient(window.SUPABASE_URL,window.SUPABASE_PUBLISHABLE_KEY);
 const dayNames=["日","一","二","三","四","五","六"];
 let restaurants=[];
 let excludedToday={date:new Date().toISOString().slice(0,10),ids:[]};
@@ -19,7 +19,7 @@ async function hashPassword(password){
  return [...new Uint8Array(hash)].map(b=>b.toString(16).padStart(2,"0")).join("");
 }
 async function getPasswordHash(){
- const {data,error}=await supabase.from("app_settings").select("admin_password_hash").eq("id",1).single();
+ const {data,error}=await db.from("app_settings").select("admin_password_hash").eq("id",1).single();
  if(error) throw error; return data.admin_password_hash;
 }
 function toggleEditMode(){
@@ -54,7 +54,7 @@ async function load(){
   if(window.SUPABASE_URL.includes("YOUR-PROJECT")) {
     document.getElementById("restaurantList").innerHTML='<div class="empty">請先在 config.js 填入 Supabase URL 與 Publishable Key。</div>'; return;
   }
-  const {data,error}=await supabase.from("restaurants").select("*").order("name");
+  const {data,error}=await db.from("restaurants").select("*").order("name");
   if(error){document.getElementById("restaurantList").innerHTML=`<div class="empty">載入失敗：${esc(error.message)}</div>`;return}
   restaurants=data||[]; render();
 }
@@ -73,8 +73,8 @@ function card(r){return `<div class="card"><h3>${esc(r.name)}</h3><div class="mu
 async function openRestaurant(id){
   const r=restaurants.find(x=>x.id===id); if(!r)return;
   const [{data:notes},{data:images}]=await Promise.all([
-    supabase.from("notes").select("*").eq("restaurant_id",id).order("pinned",{ascending:false}).order("created_at",{ascending:false}),
-    supabase.from("menu_images").select("*").eq("restaurant_id",id).order("created_at",{ascending:false})
+    db.from("notes").select("*").eq("restaurant_id",id).order("pinned",{ascending:false}).order("created_at",{ascending:false}),
+    db.from("menu_images").select("*").eq("restaurant_id",id).order("created_at",{ascending:false})
   ]);
   openModal(`<h2>${esc(r.name)}</h2><p class="muted">${esc(r.category)}</p><p class="${isOpen(r)?"open":"closed"}">${isOpen(r)?"🟢 今日有營業":"🔴 今日公休"}</p>
   <p>📅 公休：${(r.closed_days||[]).length?r.closed_days.map(d=>"星期"+dayNames[d]).join("、"):"無固定公休"}</p>
@@ -86,9 +86,9 @@ async function openRestaurant(id){
   ${editMode?`<input type="file" accept="image/*" multiple onchange="addImages('${id}',this.files)">`:""}<p class="muted">直接看菜單照片；Tag 用來搜尋品項與店家特色。</p>
   ${editMode?`<hr><button class="danger" onclick="deleteRestaurant('${id}')">刪除餐廳</button>`:""}`);
 }
-async function addNote(id){if(!requireEdit())return;const text=document.getElementById("noteText").value.trim();if(!text)return;const {error}=await supabase.from("notes").insert({restaurant_id:id,text,author:document.getElementById("noteAuthor").value.trim(),pinned:document.getElementById("notePin").checked});if(error)alert(error.message);else openRestaurant(id)}
-async function deleteNote(nid,rid){if(!requireEdit())return;if(!confirm("刪除這張小紙條？"))return;const {error}=await supabase.from("notes").delete().eq("id",nid);if(error)alert(error.message);else openRestaurant(rid)}
-async function addImages(id,files){if(!requireEdit())return;for(const file of [...files]){if(file.size>6*1024*1024){alert(`${file.name} 超過 6MB，請先縮小圖片。`);continue}const ext=(file.name.split(".").pop()||"jpg").toLowerCase(), path=`${id}/${crypto.randomUUID()}.${ext}`;const up=await supabase.storage.from("menus").upload(path,file,{contentType:file.type||"image/jpeg"});if(up.error){alert(up.error.message);continue}const {data}=supabase.storage.from("menus").getPublicUrl(path);const ins=await supabase.from("menu_images").insert({restaurant_id:id,storage_path:path,public_url:data.publicUrl});if(ins.error)alert(ins.error.message)}openRestaurant(id)}
+async function addNote(id){if(!requireEdit())return;const text=document.getElementById("noteText").value.trim();if(!text)return;const {error}=await db.from("notes").insert({restaurant_id:id,text,author:document.getElementById("noteAuthor").value.trim(),pinned:document.getElementById("notePin").checked});if(error)alert(error.message);else openRestaurant(id)}
+async function deleteNote(nid,rid){if(!requireEdit())return;if(!confirm("刪除這張小紙條？"))return;const {error}=await db.from("notes").delete().eq("id",nid);if(error)alert(error.message);else openRestaurant(rid)}
+async function addImages(id,files){if(!requireEdit())return;for(const file of [...files]){if(file.size>6*1024*1024){alert(`${file.name} 超過 6MB，請先縮小圖片。`);continue}const ext=(file.name.split(".").pop()||"jpg").toLowerCase(), path=`${id}/${crypto.randomUUID()}.${ext}`;const up=await db.storage.from("menus").upload(path,file,{contentType:file.type||"image/jpeg"});if(up.error){alert(up.error.message);continue}const {data}=db.storage.from("menus").getPublicUrl(path);const ins=await db.from("menu_images").insert({restaurant_id:id,storage_path:path,public_url:data.publicUrl});if(ins.error)alert(ins.error.message)}openRestaurant(id)}
 function openRestaurantForm(existing=null){
  const r=existing||{name:"",category:"",address:"",phone:"",closed_days:[],open_time:"",close_time:"",tags:[]};
  openModal(`<h2>${existing?"編輯餐廳":"新增餐廳"}</h2><div class="form-row"><label>餐廳名稱</label><input id="fName" value="${esc(r.name)}"></div><div class="form-row"><label>類型</label><input id="fCategory" value="${esc(r.category)}" placeholder="便當、麵店、飲料…"></div><div class="form-row"><label>地址</label><input id="fAddress" value="${esc(r.address)}"></div><div class="form-row"><label>電話</label><input id="fPhone" value="${esc(r.phone)}"></div><div class="form-row"><label>公休日</label><div class="days">${dayNames.map((d,i)=>`<label><input class="daybox" type="checkbox" value="${i}" ${(r.closed_days||[]).includes(i)?"checked":""}> 星期${d}</label>`).join("")}</div></div><div class="form-row"><label>營業時間</label><div class="inline"><input id="fOpen" type="time" value="${esc(r.open_time)}"><input id="fClose" type="time" value="${esc(r.close_time)}"></div></div><div class="form-row"><label>標籤（逗號分隔）</label><input id="fTags" value="${esc((r.tags||[]).join(","))}" placeholder="水餃,便宜,適合一個人"></div><button class="primary" onclick="saveRestaurant('${existing?existing.id:""}')">儲存</button>`);
@@ -97,10 +97,10 @@ function editRestaurant(id){if(requireEdit())openRestaurantForm(restaurants.find
 async function saveRestaurant(id){if(!requireEdit())return;
  const data={name:document.getElementById("fName").value.trim(),category:document.getElementById("fCategory").value.trim(),address:document.getElementById("fAddress").value.trim(),phone:document.getElementById("fPhone").value.trim(),closed_days:[...document.querySelectorAll(".daybox:checked")].map(x=>Number(x.value)),open_time:document.getElementById("fOpen").value,close_time:document.getElementById("fClose").value,tags:document.getElementById("fTags").value.split(",").map(x=>x.trim()).filter(Boolean)};
  if(!data.name)return alert("請輸入餐廳名稱");
- const result=id?await supabase.from("restaurants").update(data).eq("id",id):await supabase.from("restaurants").insert(data);
+ const result=id?await db.from("restaurants").update(data).eq("id",id):await db.from("restaurants").insert(data);
  if(result.error)alert(result.error.message);else{closeModal();await load()}
 }
-async function deleteRestaurant(id){if(!requireEdit())return;if(!confirm("確定刪除這間餐廳？相關紙條與菜單紀錄也會刪除。"))return;const {error}=await supabase.from("restaurants").delete().eq("id",id);if(error)alert(error.message);else{closeModal();await load()}}
+async function deleteRestaurant(id){if(!requireEdit())return;if(!confirm("確定刪除這間餐廳？相關紙條與菜單紀錄也會刪除。"))return;const {error}=await db.from("restaurants").delete().eq("id",id);if(error)alert(error.message);else{closeModal();await load()}}
 function drawPool(){const q=document.getElementById("search").value.trim().toLowerCase();return restaurants.filter(r=>isOpen(r)&&!excludedToday.ids.includes(r.id)&&(!q||[r.name,r.category,...(r.tags||[])].join(" ").toLowerCase().includes(q)))}
 function drawRestaurant(){const pool=drawPool(),status=document.getElementById("drawStatus"),btn=document.getElementById("drawBtn");if(!pool.length){status.textContent="😵 沒有可抽選的餐廳！";return}btn.disabled=true;let n=0;const timer=setInterval(()=>{status.textContent=`🎰 ${pool[n++%pool.length].name}`;if(n>=12){clearInterval(timer);const c=pool.filter(r=>r.id!==lastDrawId),w=(c.length?c:pool)[Math.floor(Math.random()*(c.length?c.length:pool.length))];lastDrawId=w.id;status.textContent=`🎉 抽中了！ ${w.name}`;showDrawResult(w);btn.disabled=false}},100)}
 function showDrawResult(r){document.getElementById("drawResult")?.remove();const e=document.createElement("div");e.id="drawResult";e.className="draw-result";e.innerHTML=`<div class="muted">今天就吃這家！</div><div class="winner">${esc(r.name)}</div><div>${(r.tags||[]).map(t=>`<span class="tag">#${esc(t)}</span>`).join("")}</div><div class="actions"><button class="secondary" onclick="openRestaurant('${r.id}')">查看店家</button><button class="secondary" onclick="excludeToday('${r.id}')">🚫 今天先不要</button><button class="primary" onclick="drawRestaurant()">再抽一次</button></div>`;document.querySelector(".draw-card").after(e)}
