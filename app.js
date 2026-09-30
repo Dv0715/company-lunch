@@ -22,19 +22,25 @@ async function getPasswordHash(){
  const {data,error}=await supabase.from("app_settings").select("admin_password_hash").eq("id",1).single();
  if(error) throw error; return data.admin_password_hash;
 }
-async function toggleEditMode(){
+function toggleEditMode(){
  if(editMode){lockEditMode();return}
- const password=prompt("請輸入午餐管理密碼：");
- if(password===null)return;
+ openModal(`<h2>🔐 編輯模式</h2><div class="form-row"><label>管理密碼</label><input id="pwInput" type="password" autocomplete="current-password" onkeydown="if(event.key==='Enter')submitPassword()"></div><p id="pwMsg" class="closed"></p><button class="primary" onclick="submitPassword()">解鎖</button>`);
+ setTimeout(()=>{const i=document.getElementById("pwInput");if(i)i.focus()},50);
+}
+async function submitPassword(){
+ const msg=document.getElementById("pwMsg"),password=document.getElementById("pwInput").value;
+ if(!password){msg.textContent="請輸入密碼";return}
+ msg.textContent="驗證中…";
  try{
   const expected=await getPasswordHash();
-  if(expected==="HASH_HERE"){alert("尚未設定管理密碼。請先到 Supabase 的 app_settings 設定 hash。");return}
-  if(await hashPassword(password)!==expected){alert("密碼錯誤");return}
+  if(expected==="HASH_HERE"){msg.textContent="尚未設定管理密碼。請先到 Supabase 的 app_settings 設定 hash。";return}
+  if(await hashPassword(password)!==expected){msg.textContent="密碼錯誤";return}
   editMode=true;
+  closeModal();
   document.getElementById("editBanner").classList.remove("hidden");
   document.getElementById("editModeBtn").textContent="🔓 編輯模式";
   render();
- }catch(e){alert("無法驗證管理密碼："+e.message)}
+ }catch(e){msg.textContent="無法驗證管理密碼："+e.message}
 }
 function lockEditMode(){
  editMode=false;
