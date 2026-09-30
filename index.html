@@ -11,8 +11,19 @@
 <body>
 <div class="app">
 <header>
-  <div><h1>🍱 公司午餐</h1><div id="today" class="muted"></div></div>
-  <button id="editModeBtn" class="primary" onclick="toggleEditMode()">🔐 編輯模式</button>
+  <div>
+    <h1>🍱 公司午餐</h1>
+    <div id="today" class="muted"></div>
+  </div>
+
+  <div class="header-actions">
+    <button id="addRestaurantBtn" class="secondary hidden" onclick="openRestaurantForm()">
+      ＋ 新增餐廳
+    </button>
+    <button id="editModeBtn" class="primary" onclick="toggleEditMode()">
+      🔐 編輯模式
+    </button>
+  </div>
 </header>
 
 <section class="draw-card">
