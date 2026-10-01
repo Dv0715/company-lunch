@@ -137,13 +137,28 @@ async function openRestaurant(id){
       ${editMode?`<button class="danger menu-image-delete" onclick="deleteImage('${i.id}','${esc(i.storage_path)}','${id}')">刪除這張</button>`:""}
     </div>`).join("");
 
-  openModal(`<h2>${esc(r.name)}</h2>
-    <p class="muted">${esc(r.category)}</p>
-    <p class="${isOpen(r)?"open":"closed"}">${isOpen(r)?"🟢 今日有營業":"🔴 今日公休"}</p>
-    <p>📅 公休：${(r.closed_days||[]).length?r.closed_days.map(d=>"星期"+dayNames[d]).join("、"):"無固定公休"}</p>
-    ${formatHours(r)?`<p>🕐 今日：${formatHours(r)}</p>`:"<p>🕐 今日：休息</p>"}
-    ${r.address?`<p>📍 ${esc(r.address)}</p>`:""}
-    ${r.phone?`<p>📞 ${esc(r.phone)}</p>`:""}
+  openModal(`<div class="restaurant-detail-head">
+      <h2>${esc(r.name)}</h2>
+      <p class="muted">${esc(r.category)}</p>
+    </div>
+    <section class="detail-menu-hero">
+      <div class="detail-menu-title"><h3>📷 菜單</h3><span>${(images||[]).length} 張</span></div>
+      <div class="detail-menu-gallery">${imageHtml||'<p class="muted detail-menu-empty">尚未上傳菜單</p>'}</div>
+      ${editMode?`<div class="upload-box">
+        <strong>📷 新增／更新菜單圖片</strong>
+        <p class="muted">可一次選多張；單張上限 6MB。</p>
+        <input type="file" accept="image/*" multiple onchange="addImages('${id}',this.files)">
+        <p id="uploadStatus" class="muted"></p>
+      </div>`:""}
+      <p class="muted detail-menu-hint">點圖片可放大查看</p>
+    </section>
+    <section class="restaurant-detail-info">
+      <p class="${isOpen(r)?"open":"closed"}">${isOpen(r)?"🟢 今日有營業":"🔴 今日公休"}</p>
+      <p>📅 公休：${(r.closed_days||[]).length?r.closed_days.map(d=>"星期"+dayNames[d]).join("、"):"無固定公休"}</p>
+      ${formatHours(r)?`<p>🕐 今日：${formatHours(r)}</p>`:"<p>🕐 今日：休息</p>"}
+      ${r.address?`<p>📍 ${esc(r.address)}</p>`:""}
+      ${r.phone?`<p>📞 ${esc(r.phone)}</p>`:""}
+    </section>
     <hr><h3>🏷️ 標籤</h3>
     <div>${(r.tags||[]).map(t=>`<span class="tag">#${esc(t)}</span>`).join("")||'<span class="muted">尚無標籤</span>'}</div>
     <hr><h3>📝 小紙條</h3>
@@ -158,15 +173,6 @@ async function openRestaurant(id){
     <p><label><input id="notePin" type="checkbox"> 📌 置頂</label>
       <button class="primary" onclick="addNote('${id}')">＋ 留下紙條</button>
     </p>`:""}
-    <hr><h3>📷 菜單照片</h3>
-    <div class="menu-images">${imageHtml||'<p class="muted">尚未上傳菜單</p>'}</div>
-    ${editMode?`<div class="upload-box">
-      <strong>📷 新增／更新菜單圖片</strong>
-      <p class="muted">可一次選多張；單張上限 6MB。</p>
-      <input type="file" accept="image/*" multiple onchange="addImages('${id}',this.files)">
-      <p id="uploadStatus" class="muted"></p>
-    </div>`:""}
-    <p class="muted">點圖片可放大查看；編輯模式可上傳或刪除菜單圖片。</p>
     ${editMode?`<hr><button class="danger" onclick="deleteRestaurant('${id}')">刪除餐廳</button>`:""}`);
 }
 

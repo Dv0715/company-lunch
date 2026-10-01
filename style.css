@@ -194,3 +194,22 @@
   .hours-row{flex-wrap:wrap}
   .hours-row input[type=time]{min-width:110px}
 }
+
+/* ===== 店家詳情：菜單優先 ===== */
+.restaurant-detail-head{margin-bottom:12px}
+.restaurant-detail-head h2{margin-bottom:4px}
+.detail-menu-hero{margin:8px 0 22px;padding:14px;border:1px solid #e4dfd6;border-radius:18px;background:#fbfaf7}
+.detail-menu-title{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
+.detail-menu-title h3{margin:0;font-size:1.2rem}
+.detail-menu-title span{font-size:.82rem;color:#777;background:#eeeae2;border-radius:999px;padding:4px 9px}
+.detail-menu-gallery{display:flex;flex-direction:column;gap:14px}
+.detail-menu-gallery .menu-image-wrap{border-radius:14px;overflow:hidden;background:#f1efe9;box-shadow:0 2px 10px #00000012}
+.detail-menu-gallery img{display:block;width:100%;height:auto;max-height:72vh;object-fit:contain;background:#f1efe9;cursor:zoom-in}
+.detail-menu-gallery .menu-image-delete{margin:0}
+.detail-menu-empty{text-align:center;padding:60px 10px;margin:0}
+.detail-menu-hint{margin:9px 0 0;text-align:center;font-size:.82rem}
+.restaurant-detail-info{font-size:.98rem}
+@media(max-width:700px){
+  .detail-menu-hero{margin-left:-3px;margin-right:-3px;padding:10px;border-radius:15px}
+  .detail-menu-gallery img{max-height:68vh}
+}
