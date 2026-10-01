@@ -213,3 +213,19 @@
   .detail-menu-hero{margin-left:-3px;margin-right:-3px;padding:10px;border-radius:15px}
   .detail-menu-gallery img{max-height:68vh}
 }
+
+/* v7：店家封面 */
+.restaurant-cover{margin:-18px -18px 14px;overflow:hidden;border-radius:16px 16px 0 0;background:#eee}
+.restaurant-cover img{display:block;width:100%;height:150px;object-fit:cover;cursor:zoom-in}
+.card-body{padding:0}
+.edit-cover-panel{border:1px solid #e5e1d9;border-radius:16px;padding:16px;background:#fcfbf8;margin-bottom:16px}
+.cover-preview{border-radius:12px;overflow:hidden;background:#f3f1ed;margin-bottom:10px;min-height:120px;display:flex;align-items:center;justify-content:center}
+.cover-preview img{display:block;width:100%;max-height:260px;object-fit:cover;cursor:zoom-in}
+.cover-empty{padding:36px 10px;color:#888;text-align:center}
+.detail-cover{margin-top:12px;border-radius:16px;overflow:hidden;background:#f1efe9}
+.detail-cover img{display:block;width:100%;max-height:280px;object-fit:cover;cursor:zoom-in}
+@media(max-width:700px){
+  .restaurant-cover{margin:-15px -15px 12px;border-radius:14px 14px 0 0}
+  .restaurant-cover img{height:150px}
+  .detail-cover img{max-height:240px}
+}

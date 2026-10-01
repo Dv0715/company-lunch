@@ -108,13 +108,16 @@ function render(){
 
 function card(r){
   return `<div class="card">
-    <h3>${esc(r.name)}</h3>
-    <div class="muted">${esc(r.category)}</div>
-    <p class="${isOpen(r)?"open":"closed"}">${isOpen(r)?`🟢 今日有營業 ${formatHours(r)}`:"🔴 今日公休"}</p>
-    <div>${(r.tags||[]).map(t=>`<span class="tag">#${esc(t)}</span>`).join("")}</div>
-    <div class="card-actions">
-      <button class="secondary" onclick="openRestaurant('${r.id}')">查看店家</button>
-      <button class="secondary" onclick="editRestaurant('${r.id}')">編輯</button>
+    ${r.cover_url?`<div class="restaurant-cover"><img src="${esc(r.cover_url)}" alt="${esc(r.name)}封面" onclick="window.open(this.src,'_blank')"></div>`:""}
+    <div class="card-body">
+      <h3>${esc(r.name)}</h3>
+      <div class="muted">${esc(r.category)}</div>
+      <p class="${isOpen(r)?"open":"closed"}">${isOpen(r)?`🟢 今日有營業 ${formatHours(r)}`:"🔴 今日公休"}</p>
+      <div>${(r.tags||[]).map(t=>`<span class="tag">#${esc(t)}</span>`).join("")}</div>
+      <div class="card-actions">
+        <button class="secondary" onclick="openRestaurant('${r.id}')">查看店家</button>
+        <button class="secondary" onclick="editRestaurant('${r.id}')">編輯</button>
+      </div>
     </div>
   </div>`;
 }
@@ -140,6 +143,7 @@ async function openRestaurant(id){
   openModal(`<div class="restaurant-detail-head">
       <h2>${esc(r.name)}</h2>
       <p class="muted">${esc(r.category)}</p>
+      ${r.cover_url?`<div class="detail-cover"><img src="${esc(r.cover_url)}" alt="${esc(r.name)}封面" onclick="window.open(this.src,'_blank')"></div>`:""}
     </div>
     <section class="detail-menu-hero">
       <div class="detail-menu-title"><h3>📷 菜單</h3><span>${(images||[]).length} 張</span></div>
@@ -353,6 +357,21 @@ async function openRestaurantForm(existing=null){
     if(!error)images=data||[];
   }
 
+  const coverSection=`<section class="edit-cover-panel">
+    <div class="section-title-row"><div>
+      <h3>🖼️ 店家封面</h3><div class="muted">這張照片會顯示在餐廳列表上；不是菜單。</div>
+    </div></div>
+    <div id="coverPreview" class="cover-preview">
+      ${r.cover_url?`<img src="${esc(r.cover_url)}" alt="店家封面" onclick="window.open(this.src,'_blank')">`:'<div class="cover-empty">尚未設定店家封面</div>'}
+    </div>
+    <div class="upload-row">
+      <input id="coverFile" type="file" accept="image/*">
+      <button type="button" class="primary" onclick="${existing?`uploadCover('${existing.id}')`:`saveThenUploadCover()`}">${existing?"上傳／更換封面":"先儲存再上傳封面"}</button>
+    </div>
+    <p id="coverUploadStatus" class="muted"></p>
+    ${r.cover_url?`<button type="button" class="danger" onclick="removeCover('${existing?.id||""}')">刪除封面</button>`:""}
+  </section>`;
+
   const imageSection=`<section class="edit-images-panel">
     <div class="section-title-row"><div>
       <h3>📷 菜單圖片</h3><div class="muted">一邊編輯資料，一邊查看／上傳菜單。</div>
@@ -392,9 +411,50 @@ async function openRestaurantForm(existing=null){
         <button class="secondary" onclick="closeModal()">取消</button>
       </div>
     </div>
-    <div class="edit-image-column">${imageSection}</div>
+    <div class="edit-image-column">${coverSection}${imageSection}</div>
   </div>`);
   setTimeout(()=>checkDuplicateContact('${existing?.id||""}'),0);
+}
+
+async function uploadCover(id){
+  if(!requireEdit())return;
+  const input=document.getElementById("coverFile"), status=document.getElementById("coverUploadStatus");
+  const file=input?.files?.[0];
+  if(!file){if(status)status.textContent="請先選擇封面圖片。";return}
+  if(file.size>6*1024*1024){alert("封面圖片超過 6MB，請先縮小圖片。");return}
+  if(!file.type.startsWith("image/")){alert("請選擇圖片檔。");return}
+  if(status)status.textContent="上傳封面中…";
+  const path=`${id}/cover`;
+  const up=await db.storage.from("menus").upload(path,file,{contentType:file.type||"image/jpeg",upsert:true,cacheControl:"3600"});
+  if(up.error){if(status)status.textContent=`上傳失敗：${up.error.message}`;return}
+  const {data}=db.storage.from("menus").getPublicUrl(path);
+  const url=data.publicUrl + `?v=${Date.now()}`;
+  const {error}=await db.from("restaurants").update({cover_url:url}).eq("id",id);
+  if(error){await db.storage.from("menus").remove([path]);if(status)status.textContent=`儲存封面網址失敗：${error.message}`;return}
+  if(status)status.textContent="封面已更新。";
+  await load();
+  openRestaurantForm(restaurants.find(r=>r.id===id));
+}
+async function saveThenUploadCover(){
+  if(!requireEdit())return;
+  const data=collectRestaurantFormData();
+  if(!data.name){alert("請先輸入餐廳名稱");return}
+  const {data:created,error}=await db.from("restaurants").insert(data).select().single();
+  if(error){alert(error.message);return}
+  await load();
+  const file=document.getElementById("coverFile")?.files?.[0];
+  openRestaurantForm(restaurants.find(r=>r.id===created.id));
+  if(file) document.getElementById("coverUploadStatus").textContent="餐廳已建立。請重新選取封面後按「上傳／更換封面」。";
+}
+async function removeCover(id){
+  if(!requireEdit()||!id)return;
+  if(!confirm("確定刪除這張店家封面？"))return;
+  const fileResult=await db.storage.from("menus").remove([`${id}/cover`]);
+  if(fileResult.error){alert("刪除封面檔案失敗："+fileResult.error.message);return}
+  const {error}=await db.from("restaurants").update({cover_url:null}).eq("id",id);
+  if(error){alert("封面檔案已刪除，但資料更新失敗："+error.message);return}
+  await load();
+  openRestaurantForm(restaurants.find(r=>r.id===id));
 }
 
 async function uploadFromRestaurantForm(id){
@@ -498,6 +558,7 @@ async function deleteRestaurant(id){
   const {data:images,error:imageReadError}=await db.from("menu_images").select("storage_path").eq("restaurant_id",id);
   if(imageReadError){alert("讀取圖片紀錄失敗："+imageReadError.message);return}
   const paths=(images||[]).map(x=>x.storage_path).filter(Boolean);
+  paths.push(`${id}/cover`);
   if(paths.length){
     const {error:removeError}=await db.storage.from("menus").remove(paths);
     if(removeError){alert("刪除圖片檔案失敗："+removeError.message);return}
