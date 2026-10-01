@@ -169,3 +169,28 @@
   .upload-row{flex-direction:column;align-items:stretch}
   .upload-row button{width:100%}
 }
+
+/* v4：菜單大圖 */
+.edit-gallery{display:flex;flex-direction:column;gap:14px}
+.edit-gallery .menu-image-wrap{width:100%}
+.edit-gallery img{display:block;width:100%;max-height:560px;aspect-ratio:auto;object-fit:contain;background:#f3f1ed;cursor:zoom-in}
+
+/* v4：每週個別營業時間 */
+.hours-panel{margin:18px 0;padding:16px;border:1px solid #e5e1d9;border-radius:16px;background:#fcfbf8}
+.weekly-hours{display:flex;flex-direction:column;gap:10px}
+.day-hours-card{padding:12px;border:1px solid #e3ded5;border-radius:12px;background:#fff}
+.day-hours-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
+.day-closed-label{display:flex;align-items:center;gap:7px;cursor:pointer}
+.day-closed-label span{color:#888;font-size:.82rem}
+.add-hours{border:0;border-radius:8px;padding:5px 9px;cursor:pointer;background:#eeeae2}
+.hours-list{display:flex;flex-direction:column;gap:7px}
+.hours-list.hours-disabled{opacity:.45}
+.hours-row{display:flex;align-items:center;gap:7px}
+.hours-row input[type=time]{flex:1;min-width:0}
+.remove-hours{width:32px;height:32px;border:0;border-radius:8px;background:#f3e4e4;color:#a33;cursor:pointer;font-size:18px}
+@media (min-width:900px){.hours-panel{max-height:620px;overflow:auto}}
+@media (max-width:700px){
+  .edit-gallery img{max-height:480px}
+  .hours-row{flex-wrap:wrap}
+  .hours-row input[type=time]{min-width:110px}
+}

@@ -6,8 +6,25 @@ let excludedToday={date:new Date().toISOString().slice(0,10),ids:[]};
 let lastDrawId=null;
 
 const today=()=>new Date().getDay();
-const isOpen=r=>!(r.closed_days||[]).includes(today());
 const esc=s=>String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]));
+
+function normalizeBusinessHours(r){
+  if(r.business_hours && typeof r.business_hours==="object" && Object.keys(r.business_hours).length){
+    return r.business_hours;
+  }
+  const out={}, closed=new Set(r.closed_days||[]);
+  for(let d=0;d<7;d++){
+    out[d]=closed.has(d)?[]:(r.open_time&&r.close_time?[{open:r.open_time,close:r.close_time}]:[]);
+  }
+  return out;
+}
+function isOpen(r){
+  const day=normalizeBusinessHours(r)[today()];
+  return Array.isArray(day)&&day.length>0;
+}
+function formatHours(r,day=today()){
+  return (normalizeBusinessHours(r)[day]||[]).map(x=>`${esc(x.open)}～${esc(x.close)}`).join("、");
+}
 function closeModal(){document.getElementById("modal").classList.add("hidden")}
 function openModal(html){document.getElementById("modalContent").innerHTML=html;document.getElementById("modal").classList.remove("hidden")}
 
@@ -93,7 +110,7 @@ function card(r){
   return `<div class="card">
     <h3>${esc(r.name)}</h3>
     <div class="muted">${esc(r.category)}</div>
-    <p class="${isOpen(r)?"open":"closed"}">${isOpen(r)?"🟢 今日有營業":"🔴 今日公休"}</p>
+    <p class="${isOpen(r)?"open":"closed"}">${isOpen(r)?`🟢 今日有營業 ${formatHours(r)}`:"🔴 今日公休"}</p>
     <div>${(r.tags||[]).map(t=>`<span class="tag">#${esc(t)}</span>`).join("")}</div>
     <div class="card-actions">
       <button class="secondary" onclick="openRestaurant('${r.id}')">查看店家</button>
@@ -124,7 +141,7 @@ async function openRestaurant(id){
     <p class="muted">${esc(r.category)}</p>
     <p class="${isOpen(r)?"open":"closed"}">${isOpen(r)?"🟢 今日有營業":"🔴 今日公休"}</p>
     <p>📅 公休：${(r.closed_days||[]).length?r.closed_days.map(d=>"星期"+dayNames[d]).join("、"):"無固定公休"}</p>
-    ${r.open_time?`<p>🕐 ${esc(r.open_time)}～${esc(r.close_time)}</p>`:""}
+    ${formatHours(r)?`<p>🕐 今日：${formatHours(r)}</p>`:"<p>🕐 今日：休息</p>"}
     ${r.address?`<p>📍 ${esc(r.address)}</p>`:""}
     ${r.phone?`<p>📞 ${esc(r.phone)}</p>`:""}
     <hr><h3>🏷️ 標籤</h3>
@@ -259,127 +276,118 @@ function checkDuplicateContact(existingId=""){
     }).join("");
 }
 
+function getHoursFromForm(){
+  const out={};
+  for(let d=0;d<7;d++){
+    const closed=!!document.getElementById(`closed_${d}`)?.checked;
+    const rows=[...document.querySelectorAll(`.hours-row[data-day="${d}"]`)];
+    out[d]=closed?[]:rows.map(row=>({
+      open:row.querySelector(".hour-open").value,
+      close:row.querySelector(".hour-close").value
+    })).filter(x=>x.open&&x.close);
+  }
+  return out;
+}
+function addHoursRow(day,open="",close=""){
+  const wrap=document.getElementById(`hours_${day}`);
+  if(!wrap)return;
+  const row=document.createElement("div");
+  row.className="hours-row"; row.dataset.day=day;
+  row.innerHTML=`<input class="hour-open" type="time" value="${esc(open)}">
+    <span>～</span>
+    <input class="hour-close" type="time" value="${esc(close)}">
+    <button type="button" class="remove-hours" onclick="this.parentElement.remove()">×</button>`;
+  wrap.appendChild(row);
+}
+function toggleDayHours(day){
+  const closed=document.getElementById(`closed_${day}`)?.checked;
+  document.getElementById(`hours_${day}`)?.classList.toggle("hours-disabled",!!closed);
+}
+function renderHoursEditor(r){
+  const hours=normalizeBusinessHours(r);
+  return `<section class="hours-panel">
+    <div class="section-title-row"><div>
+      <h3>🕐 每週營業時間</h3>
+      <div class="muted">每天可設定多個時段，例如 10:00～14:00、17:00～21:00。</div>
+    </div></div>
+    <div class="weekly-hours">
+      ${dayNames.map((name,d)=>{
+        const dayHours=Array.isArray(hours[d])?hours[d]:[];
+        const closed=(r.closed_days||[]).includes(d)||dayHours.length===0;
+        const rows=dayHours.length?dayHours:[{open:"",close:""}];
+        return `<div class="day-hours-card">
+          <div class="day-hours-head">
+            <label class="day-closed-label">
+              <input id="closed_${d}" type="checkbox" ${closed?"checked":""} onchange="toggleDayHours(${d})">
+              <strong>星期${name}</strong><span>公休</span>
+            </label>
+            <button type="button" class="add-hours" onclick="addHoursRow(${d})">＋ 時段</button>
+          </div>
+          <div id="hours_${d}" class="hours-list ${closed?"hours-disabled":""}">
+            ${rows.map(x=>`<div class="hours-row" data-day="${d}">
+              <input class="hour-open" type="time" value="${esc(x.open)}">
+              <span>～</span>
+              <input class="hour-close" type="time" value="${esc(x.close)}">
+              <button type="button" class="remove-hours" onclick="this.parentElement.remove()">×</button>
+            </div>`).join("")}
+          </div>
+        </div>`;
+      }).join("")}
+    </div>
+  </section>`;
+}
+
 async function openRestaurantForm(existing=null){
   if(!requireEdit())return;
-
-  const r=existing||{
-    name:"",category:"",address:"",phone:"",
-    closed_days:[],open_time:"",close_time:"",tags:[]
-  };
+  const r=existing||{name:"",category:"",address:"",phone:"",closed_days:[],open_time:"",close_time:"",tags:[],business_hours:{}};
 
   let images=[];
   if(existing){
-    const {data,error}=await db.from("menu_images")
-      .select("*")
-      .eq("restaurant_id",existing.id)
-      .order("created_at",{ascending:false});
-    if(!error) images=data||[];
+    const {data,error}=await db.from("menu_images").select("*").eq("restaurant_id",existing.id).order("created_at",{ascending:false});
+    if(!error)images=data||[];
   }
 
-  const imageSection = `
-    <section class="edit-images-panel">
-      <div class="section-title-row">
-        <div>
-          <h3>📷 菜單圖片</h3>
-          <div class="muted">可以一邊編輯店家資料，一邊查看／上傳菜單。</div>
-        </div>
-        <span class="image-count">${images.length} 張</span>
+  const imageSection=`<section class="edit-images-panel">
+    <div class="section-title-row"><div>
+      <h3>📷 菜單圖片</h3><div class="muted">一邊編輯資料，一邊查看／上傳菜單。</div>
+    </div><span class="image-count">${images.length} 張</span></div>
+    <div class="menu-images edit-gallery">
+      ${images.map(i=>`<div class="menu-image-wrap">
+        <img src="${esc(i.public_url)}" alt="菜單" onclick="window.open(this.src,'_blank')">
+        <button type="button" class="danger menu-image-delete" onclick="deleteImage('${i.id}','${esc(i.storage_path)}','${existing?.id||""}')">刪除</button>
+      </div>`).join("")||'<div class="empty-image">目前尚未上傳菜單圖片</div>'}
+    </div>
+    <div class="upload-box">
+      <strong>＋ 上傳菜單圖片</strong><p class="muted">可一次選擇多張圖片，單張上限 6MB。</p>
+      <div class="upload-row">
+        <input id="editMenuFiles" type="file" accept="image/*" multiple>
+        <button type="button" class="primary" onclick="${existing?`uploadFromRestaurantForm('${existing.id}')`:`saveThenUploadRestaurant()`}">
+          ${existing?"上傳選取的圖片":"先儲存並上傳"}
+        </button>
       </div>
-
-      <div class="menu-images edit-gallery">
-        ${images.map(i=>`
-          <div class="menu-image-wrap">
-            <img src="${esc(i.public_url)}" alt="菜單"
-                 onclick="window.open(this.src,'_blank')">
-            <button type="button" class="danger menu-image-delete"
-                    onclick="deleteImage('${i.id}','${esc(i.storage_path)}','${existing?.id||""}')">
-              刪除
-            </button>
-          </div>
-        `).join("") || '<div class="empty-image">目前尚未上傳菜單圖片</div>'}
-      </div>
-
-      <div class="upload-box">
-        <strong>＋ 上傳菜單圖片</strong>
-        <p class="muted">可一次選擇多張圖片，單張上限 6MB。</p>
-        <div class="upload-row">
-          <input id="editMenuFiles" type="file" accept="image/*" multiple>
-          <button type="button" class="primary"
-                  onclick="${existing ? `uploadFromRestaurantForm('${existing.id}')` : `saveThenUploadRestaurant()`}">
-            ${existing ? "上傳選取的圖片" : "先儲存並上傳"}
-          </button>
-        </div>
-        <p id="editUploadStatus" class="muted"></p>
-      </div>
-    </section>`;
-
-  const duplicateSection = `
-    <div id="duplicateWarning" class="duplicate-warning"></div>`;
+      <p id="editUploadStatus" class="muted"></p>
+    </div>
+  </section>`;
 
   openModal(`<div class="edit-form-layout">
     <div class="edit-info-panel">
       <h2>${existing?"編輯餐廳":"新增餐廳"}</h2>
-
-      <div class="form-row">
-        <label>餐廳名稱</label>
-        <input id="fName" value="${esc(r.name)}" oninput="checkDuplicateContact('${existing?.id||""}')">
+      <div class="form-row"><label>餐廳名稱</label><input id="fName" value="${esc(r.name)}" oninput="checkDuplicateContact('${existing?.id||""}')"></div>
+      <div class="form-row"><label>類型</label><input id="fCategory" value="${esc(r.category)}" placeholder="便當、麵店、飲料…"></div>
+      <div class="form-row"><label>地址</label><input id="fAddress" value="${esc(r.address)}" oninput="checkDuplicateContact('${existing?.id||""}')"></div>
+      <div class="form-row"><label>電話</label><input id="fPhone" value="${esc(r.phone)}" oninput="checkDuplicateContact('${existing?.id||""}')"></div>
+      <div id="duplicateWarning" class="duplicate-warning"></div>
+      ${renderHoursEditor(r)}
+      <div class="form-row"><label>標籤（逗號分隔）</label>
+        <input id="fTags" value="${esc((r.tags||[]).join(","))}" placeholder="水餃,便宜,適合一個人">
       </div>
-
-      <div class="form-row">
-        <label>類型</label>
-        <input id="fCategory" value="${esc(r.category)}" placeholder="便當、麵店、飲料…">
-      </div>
-
-      <div class="form-row">
-        <label>地址</label>
-        <input id="fAddress" value="${esc(r.address)}"
-               oninput="checkDuplicateContact('${existing?.id||""}')">
-      </div>
-
-      <div class="form-row">
-        <label>電話</label>
-        <input id="fPhone" value="${esc(r.phone)}"
-               oninput="checkDuplicateContact('${existing?.id||""}')">
-      </div>
-
-      ${duplicateSection}
-
-      <div class="form-row">
-        <label>公休日</label>
-        <div class="days">
-          ${dayNames.map((d,i)=>`
-            <label><input class="daybox" type="checkbox" value="${i}"
-              ${(r.closed_days||[]).includes(i)?"checked":""}> 星期${d}</label>
-          `).join("")}
-        </div>
-      </div>
-
-      <div class="form-row">
-        <label>營業時間</label>
-        <div class="inline">
-          <input id="fOpen" type="time" value="${esc(r.open_time)}">
-          <input id="fClose" type="time" value="${esc(r.close_time)}">
-        </div>
-      </div>
-
-      <div class="form-row">
-        <label>標籤（逗號分隔）</label>
-        <input id="fTags" value="${esc((r.tags||[]).join(","))}"
-               placeholder="水餃,便宜,適合一個人">
-      </div>
-
       <div class="form-actions">
         <button class="primary" onclick="saveRestaurant('${existing?.id||""}')">儲存資料</button>
         <button class="secondary" onclick="closeModal()">取消</button>
       </div>
     </div>
-
-    <div class="edit-image-column">
-      ${imageSection}
-    </div>
+    <div class="edit-image-column">${imageSection}</div>
   </div>`);
-
-  // 顯示目前地址／電話是否和其他餐廳重複
   setTimeout(()=>checkDuplicateContact('${existing?.id||""}'),0);
 }
 
@@ -441,63 +449,39 @@ async function uploadFromRestaurantForm(id){
   openRestaurantForm(restaurants.find(r=>r.id===id));
 }
 
-async function saveThenUploadRestaurant(){
-  if(!requireEdit())return;
-
-  const data={
+function collectRestaurantFormData(){
+  const business_hours=getHoursFromForm(), closed_days=[];
+  for(let d=0;d<7;d++) if(document.getElementById(`closed_${d}`)?.checked) closed_days.push(d);
+  const allSlots=Object.values(business_hours).flat();
+  return {
     name:document.getElementById("fName").value.trim(),
     category:document.getElementById("fCategory").value.trim(),
     address:document.getElementById("fAddress").value.trim(),
     phone:document.getElementById("fPhone").value.trim(),
-    closed_days:[...document.querySelectorAll(".daybox:checked")].map(x=>Number(x.value)),
-    open_time:document.getElementById("fOpen").value,
-    close_time:document.getElementById("fClose").value,
+    closed_days,business_hours,
+    open_time:allSlots[0]?.open||"", close_time:allSlots[0]?.close||"",
     tags:document.getElementById("fTags").value.split(",").map(x=>x.trim()).filter(Boolean)
   };
-
+}
+async function saveThenUploadRestaurant(){
+  if(!requireEdit())return;
+  const data=collectRestaurantFormData();
   if(!data.name){alert("請輸入餐廳名稱");return}
-
   const {data:created,error}=await db.from("restaurants").insert(data).select().single();
   if(error){alert(error.message);return}
-
-  const input=document.getElementById("editMenuFiles");
-  const files=input?.files ? [...input.files] : [];
-
   await load();
-
-  if(files.length){
-    // 重新打開表單並保留圖片上傳流程
-    openRestaurantForm(restaurants.find(r=>r.id===created.id));
-    setTimeout(async()=>{
-      const current=document.getElementById("editMenuFiles");
-      // FileList 無法跨重新 render 保留，所以提示使用者重新選一次
-      const status=document.getElementById("editUploadStatus");
-      if(status)status.textContent="餐廳已建立；請重新選取圖片後按「上傳選取的圖片」。";
-    },50);
-  }else{
-    openRestaurantForm(restaurants.find(r=>r.id===created.id));
-  }
+  openRestaurantForm(restaurants.find(r=>r.id===created.id));
+  const status=document.getElementById("editUploadStatus");
+  if(status)status.textContent="餐廳已建立；請重新選取圖片後按「上傳選取的圖片」。";
 }
 
 function editRestaurant(id){if(requireEdit())openRestaurantForm(restaurants.find(r=>r.id===id))}
 async function saveRestaurant(id){
   if(!requireEdit())return;
-  const data={
-    name:document.getElementById("fName").value.trim(),
-    category:document.getElementById("fCategory").value.trim(),
-    address:document.getElementById("fAddress").value.trim(),
-    phone:document.getElementById("fPhone").value.trim(),
-    closed_days:[...document.querySelectorAll(".daybox:checked")].map(x=>Number(x.value)),
-    open_time:document.getElementById("fOpen").value,
-    close_time:document.getElementById("fClose").value,
-    tags:document.getElementById("fTags").value.split(",").map(x=>x.trim()).filter(Boolean)
-  };
+  const data=collectRestaurantFormData();
   if(!data.name)return alert("請輸入餐廳名稱");
-  const result=id
-    ?await db.from("restaurants").update(data).eq("id",id)
-    :await db.from("restaurants").insert(data);
-  if(result.error)alert(result.error.message);
-  else{closeModal();await load()}
+  const result=id?await db.from("restaurants").update(data).eq("id",id):await db.from("restaurants").insert(data);
+  if(result.error)alert(result.error.message); else {closeModal();await load()}
 }
 
 async function deleteRestaurant(id){
