@@ -9,21 +9,36 @@ const today=()=>new Date().getDay();
 const esc=s=>String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]));
 
 function normalizeBusinessHours(r){
-  if(r.business_hours && typeof r.business_hours==="object" && Object.keys(r.business_hours).length){
-    return r.business_hours;
-  }
-  const out={}, closed=new Set(r.closed_days||[]);
+  const raw=(r.business_hours&&typeof r.business_hours==='object')?r.business_hours:{};
+  const out={};
+  const closed=new Set(r.closed_days||[]);
   for(let d=0;d<7;d++){
-    out[d]=closed.has(d)?[]:(r.open_time&&r.close_time?[{open:r.open_time,close:r.close_time}]:[]);
+    const day=raw[d] ?? raw[String(d)];
+    if(day && !Array.isArray(day) && typeof day==='object' && ('am' in day || 'pm' in day)){
+      out[d]={am:Array.isArray(day.am)?day.am:[],pm:Array.isArray(day.pm)?day.pm:[]};
+    }else{
+      const arr=Array.isArray(day)?day:(!Object.keys(raw).length && r.open_time&&r.close_time?[{open:r.open_time,close:r.close_time}]:[]);
+      const am=[],pm=[];
+      arr.forEach(x=>{
+        if(!x||!x.open||!x.close)return;
+        const period=timeMinutes(x.open)>=12?'pm':'am';
+        (period==='pm'?pm:am).push({open:x.open,close:x.close});
+      });
+      if(closed.has(d)){out[d]={am:[],pm:[]};}
+      else out[d]={am,pm};
+    }
   }
   return out;
 }
+function daySlots(hours,day){
+  const x=hours[day]||{am:[],pm:[]};
+  return [...(x.am||[]),...(x.pm||[])];
+}
 function isOpen(r){
-  const day=normalizeBusinessHours(r)[today()];
-  return Array.isArray(day)&&day.length>0;
+  return daySlots(normalizeBusinessHours(r),today()).length>0;
 }
 function formatHours(r,day=today()){
-  return (normalizeBusinessHours(r)[day]||[]).map(x=>`${esc(x.open)}～${esc(x.close)}`).join("、");
+  return daySlots(normalizeBusinessHours(r),day).map(x=>`${esc(x.open)}～${esc(x.close)}`).join('、');
 }
 function closeModal(){document.getElementById("modal").classList.add("hidden")}
 function openModal(html){document.getElementById("modalContent").innerHTML=html;document.getElementById("modal").classList.remove("hidden")}
@@ -318,7 +333,11 @@ function getHoursFromForm(){
   const out={};
   for(let d=0;d<7;d++){
     const closed=!!document.getElementById(`closed_${d}`)?.checked;
-    out[d]=closed?[]:getDayHoursFromForm(d);
+    out[d]=closed?{am:[],pm:[]}:{am:[],pm:[]};
+    if(!closed){
+      out[d].am=getDayHoursFromForm(d).filter(x=>x.period==='am').map(x=>({open:x.open,close:x.close}));
+      out[d].pm=getDayHoursFromForm(d).filter(x=>x.period==='pm').map(x=>({open:x.open,close:x.close}));
+    }
   }
   return out;
 }
@@ -364,11 +383,14 @@ function applyCopyHours(day){
   document.getElementById(`copy_panel_${day}`)?.classList.add('hidden');
 }
 function splitDayHours(dayHours){
+  if(dayHours && !Array.isArray(dayHours) && typeof dayHours==='object' && ('am' in dayHours || 'pm' in dayHours)){
+    return {am:Array.isArray(dayHours.am)?dayHours.am:[],pm:Array.isArray(dayHours.pm)?dayHours.pm:[]};
+  }
   const am=[],pm=[];
-  dayHours.forEach(x=>{
-    // 24 小時制下，分組只看實際時間：00:00～11:59 為上午，12:00～23:59 為下午。
-    // 不再使用資料裡可能殘留的 period，避免舊資料把 11:00 錯放到下午。
-    (hourPeriod(x.open)==='pm'?pm:am).push({...x,period:hourPeriod(x.open)});
+  (Array.isArray(dayHours)?dayHours:[]).forEach(x=>{
+    if(!x||!x.open||!x.close)return;
+    const period=timeMinutes(x.open)>=12?'pm':'am';
+    (period==='pm'?pm:am).push({open:x.open,close:x.close});
   });
   return {am,pm};
 }
@@ -395,8 +417,8 @@ function renderHoursEditor(r){
     </div></div>
     <div class="weekly-hours">
       ${dayNames.map((name,d)=>{
-        const dayHours=Array.isArray(hours[d])?hours[d]:[];
-        const closed=(r.closed_days||[]).includes(d)||dayHours.length===0;
+        const dayHours=hours[d]||{am:[],pm:[]};
+        const closed=(r.closed_days||[]).includes(d)||(dayHours.am.length===0&&dayHours.pm.length===0);
         const {am,pm}=splitDayHours(dayHours);
         return `<div class="day-hours-card">
           <div class="day-hours-head">
@@ -594,7 +616,7 @@ async function uploadFromRestaurantForm(id){
 function collectRestaurantFormData(){
   const business_hours=getHoursFromForm(), closed_days=[];
   for(let d=0;d<7;d++) if(document.getElementById(`closed_${d}`)?.checked) closed_days.push(d);
-  const allSlots=Object.values(business_hours).flat();
+  const allSlots=Object.values(business_hours).flatMap(x=>[...(x.am||[]),...(x.pm||[])]);
   return {
     name:document.getElementById("fName").value.trim(),
     category:document.getElementById("fCategory").value.trim(),
