@@ -229,3 +229,26 @@
   .restaurant-cover img{height:150px}
   .detail-cover img{max-height:240px}
 }
+
+/* v8：24 小時制＋上午／下午分組＋營業時間快速套用 */
+.hidden{display:none!important}
+.hours-panel .muted{line-height:1.45}
+.day-hours-card{position:relative}
+.copy-hours-btn{border:0;border-radius:9px;padding:7px 10px;cursor:pointer;background:#eeeae2;color:#333;font-size:.88rem}
+.copy-panel{margin:0 0 12px;padding:12px;border:1px dashed #d9d1c5;border-radius:12px;background:#faf8f3}
+.copy-panel-title{font-size:.88rem;font-weight:600;margin-bottom:8px}
+.copy-targets{display:flex;flex-wrap:wrap;gap:7px}
+.copy-targets label{display:flex;align-items:center;gap:5px;padding:5px 8px;border-radius:8px;background:#fff;border:1px solid #e4dfd6}
+.copy-panel-actions{display:flex;gap:7px;margin-top:10px}
+.small-btn{padding:6px 10px!important;font-size:.88rem}
+.day-periods{display:flex;flex-direction:column;gap:10px}
+.period-block{padding:10px;border-radius:11px;background:#faf9f6;border:1px solid #eee9e0}
+.period-title{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:7px;font-weight:600}
+.hours-placeholder{font-size:.82rem;color:#aaa;padding:5px 2px}
+.hours-row input[type=text]{flex:1;min-width:0;padding:9px 10px;border:1px solid #d8d3ca;border-radius:8px;background:#fff;font-size:1rem}
+.hours-row input[type=text]:focus{outline:2px solid #ddd4c7;outline-offset:0}
+@media(max-width:700px){
+  .copy-hours-btn{font-size:.82rem}
+  .period-block{padding:9px}
+  .hours-row input[type=text]{min-width:100px}
+}

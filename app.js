@@ -286,63 +286,128 @@ function checkDuplicateContact(existingId=""){
     }).join("");
 }
 
+function normalizeTimeValue(value){
+  let v=String(value||'').trim();
+  if(!v)return '';
+  v=v.replace(/[：]/g,':');
+  if(/^\d{4}$/.test(v))v=v.slice(0,2)+':'+v.slice(2);
+  const m=v.match(/^(\d{1,2})(?::(\d{1,2}))?$/);
+  if(m){
+    const h=Number(m[1]), min=Number(m[2]||0);
+    if(h>=0&&h<=23&&min>=0&&min<=59)return `${String(h).padStart(2,'0')}:${String(min).padStart(2,'0')}`;
+  }
+  return v;
+}
+function timeMinutes(v){
+  const m=String(v||'').match(/^(\d{2}):(\d{2})$/);
+  return m?Number(m[1])*60+Number(m[2]):-1;
+}
+function hourPeriod(open){return timeMinutes(open)>=12?'pm':'am'}
+function getDayHoursFromForm(day){
+  return [...document.querySelectorAll(`.hours-row[data-day="${day}"]`)].map(row=>({
+    open:normalizeTimeValue(row.querySelector('.hour-open')?.value),
+    close:normalizeTimeValue(row.querySelector('.hour-close')?.value)
+  })).filter(x=>x.open&&x.close);
+}
 function getHoursFromForm(){
   const out={};
   for(let d=0;d<7;d++){
     const closed=!!document.getElementById(`closed_${d}`)?.checked;
-    const rows=[...document.querySelectorAll(`.hours-row[data-day="${d}"]`)];
-    out[d]=closed?[]:rows.map(row=>({
-      open:row.querySelector(".hour-open").value,
-      close:row.querySelector(".hour-close").value
-    })).filter(x=>x.open&&x.close);
+    out[d]=closed?[]:getDayHoursFromForm(d);
   }
   return out;
 }
-function addHoursRow(day,open="",close=""){
-  const wrap=document.getElementById(`hours_${day}`);
+function syncTimeInput(input){
+  if(!input)return;
+  const v=normalizeTimeValue(input.value);
+  if(v && timeMinutes(v)>=0) input.value=v;
+}
+function addHoursRow(day,period='am',open='',close=''){
+  const wrap=document.getElementById(`hours_${day}_${period}`);
   if(!wrap)return;
-  const row=document.createElement("div");
-  row.className="hours-row"; row.dataset.day=day;
-  row.innerHTML=`<input class="hour-open" type="time" value="${esc(open)}">
+  const row=document.createElement('div');
+  row.className='hours-row'; row.dataset.day=day;
+  row.innerHTML=`<input class="hour-open" type="text" inputmode="numeric" maxlength="5" placeholder="00:00" value="${esc(open)}" onblur="syncTimeInput(this)">
     <span>～</span>
-    <input class="hour-close" type="time" value="${esc(close)}">
+    <input class="hour-close" type="text" inputmode="numeric" maxlength="5" placeholder="00:00" value="${esc(close)}" onblur="syncTimeInput(this)">
     <button type="button" class="remove-hours" onclick="this.parentElement.remove()">×</button>`;
   wrap.appendChild(row);
 }
 function toggleDayHours(day){
   const closed=document.getElementById(`closed_${day}`)?.checked;
-  document.getElementById(`hours_${day}`)?.classList.toggle("hours-disabled",!!closed);
+  document.getElementById(`hours_${day}_am`)?.parentElement?.parentElement?.classList.toggle('hours-disabled',!!closed);
+  document.getElementById(`hours_${day}_pm`)?.parentElement?.parentElement?.classList.toggle('hours-disabled',!!closed);
+  document.getElementById(`copy_${day}`)?.classList.toggle('hours-disabled',!!closed);
+}
+function toggleCopyPanel(day){
+  document.getElementById(`copy_panel_${day}`)?.classList.toggle('hidden');
+}
+function applyCopyHours(day){
+  const selected=[...document.querySelectorAll(`.copy-target-${day}:checked`)].map(x=>Number(x.value));
+  if(!selected.length){alert('請先選擇要套用的日期。');return}
+  const source=getDayHoursFromForm(day);
+  if(!source.length){alert('這一天目前沒有完整的營業時段可複製。');return}
+  selected.forEach(target=>{
+    const closed=document.getElementById(`closed_${target}`);
+    if(closed){closed.checked=false;toggleDayHours(target)}
+    document.getElementById(`hours_${target}_am`).innerHTML='';
+    document.getElementById(`hours_${target}_pm`).innerHTML='';
+    source.forEach(x=>addHoursRow(target,hourPeriod(x.open),x.open,x.close));
+  });
+  document.getElementById(`copy_panel_${day}`)?.classList.add('hidden');
+}
+function splitDayHours(dayHours){
+  const am=[],pm=[];
+  dayHours.forEach(x=>(hourPeriod(x.open)==='pm'?pm:am).push(x));
+  return {am,pm};
+}
+function renderHourRows(day,period,rows){
+  return rows.length?rows.map(x=>`<div class="hours-row" data-day="${day}">
+    <input class="hour-open" type="text" inputmode="numeric" maxlength="5" placeholder="00:00" value="${esc(x.open)}" onblur="syncTimeInput(this)">
+    <span>～</span>
+    <input class="hour-close" type="text" inputmode="numeric" maxlength="5" placeholder="00:00" value="${esc(x.close)}" onblur="syncTimeInput(this)">
+    <button type="button" class="remove-hours" onclick="this.parentElement.remove()">×</button>
+  </div>`).join(''):`<div class="hours-placeholder">尚未設定</div>`;
+}
+function renderPeriodEditor(day,period,label,rows){
+  return `<div class="period-block">
+    <div class="period-title"><span>${label}</span><button type="button" class="add-hours" onclick="addHoursRow(${day},'${period}')">＋ 時段</button></div>
+    <div id="hours_${day}_${period}" class="hours-list">${renderHourRows(day,period,rows)}</div>
+  </div>`;
 }
 function renderHoursEditor(r){
   const hours=normalizeBusinessHours(r);
   return `<section class="hours-panel">
     <div class="section-title-row"><div>
       <h3>🕐 每週營業時間</h3>
-      <div class="muted">每天可設定多個時段，例如 10:00～14:00、17:00～21:00。</div>
+      <div class="muted">時間直接使用 24 小時制；保留上午／下午分組。每一天可設定多個時段。</div>
     </div></div>
     <div class="weekly-hours">
       ${dayNames.map((name,d)=>{
         const dayHours=Array.isArray(hours[d])?hours[d]:[];
         const closed=(r.closed_days||[]).includes(d)||dayHours.length===0;
-        const rows=dayHours.length?dayHours:[{open:"",close:""}];
+        const {am,pm}=splitDayHours(dayHours);
         return `<div class="day-hours-card">
           <div class="day-hours-head">
             <label class="day-closed-label">
-              <input id="closed_${d}" type="checkbox" ${closed?"checked":""} onchange="toggleDayHours(${d})">
+              <input id="closed_${d}" type="checkbox" ${closed?'checked':''} onchange="toggleDayHours(${d})">
               <strong>星期${name}</strong><span>公休</span>
             </label>
-            <button type="button" class="add-hours" onclick="addHoursRow(${d})">＋ 時段</button>
+            <button type="button" class="copy-hours-btn" id="copy_${d}" onclick="toggleCopyPanel(${d})">複製到其他日期</button>
           </div>
-          <div id="hours_${d}" class="hours-list ${closed?"hours-disabled":""}">
-            ${rows.map(x=>`<div class="hours-row" data-day="${d}">
-              <input class="hour-open" type="time" value="${esc(x.open)}">
-              <span>～</span>
-              <input class="hour-close" type="time" value="${esc(x.close)}">
-              <button type="button" class="remove-hours" onclick="this.parentElement.remove()">×</button>
-            </div>`).join("")}
+          <div id="copy_panel_${d}" class="copy-panel hidden">
+            <div class="copy-panel-title">將星期${name}的營業時間套用到：</div>
+            <div class="copy-targets">
+              ${dayNames.map((n,t)=>t===d?'':`<label><input class="copy-target-${d}" type="checkbox" value="${t}"> 星期${n}</label>`).join('')}
+            </div>
+            <div class="copy-panel-actions"><button type="button" class="primary small-btn" onclick="applyCopyHours(${d})">套用</button><button type="button" class="secondary small-btn" onclick="toggleCopyPanel(${d})">取消</button></div>
+          </div>
+          <div class="day-periods ${closed?'hours-disabled':''}">
+            ${renderPeriodEditor(d,'am','上午時段',am)}
+            ${renderPeriodEditor(d,'pm','下午時段',pm)}
           </div>
         </div>`;
-      }).join("")}
+      }).join('')}
     </div>
   </section>`;
 }
