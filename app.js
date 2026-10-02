@@ -328,6 +328,7 @@ function syncTimeInput(input){
   if(v && timeMinutes(v)>=0) input.value=v;
 }
 function addHoursRow(day,period='am',open='',close=''){
+  // 明確指定要加入的上午／下午容器；不再依時間自動判斷，避免 11:00～14:00 被塞到下午。
   const wrap=document.getElementById(`hours_${day}_${period}`);
   if(!wrap)return;
   const row=document.createElement('div');
@@ -336,6 +337,7 @@ function addHoursRow(day,period='am',open='',close=''){
     <span>～</span>
     <input class="hour-close" type="text" inputmode="numeric" maxlength="5" placeholder="00:00" value="${esc(close)}" onblur="syncTimeInput(this)">
     <button type="button" class="remove-hours" onclick="this.parentElement.remove()">×</button>`;
+  wrap.querySelector('.hours-placeholder')?.remove();
   wrap.appendChild(row);
 }
 function toggleDayHours(day){
@@ -363,7 +365,11 @@ function applyCopyHours(day){
 }
 function splitDayHours(dayHours){
   const am=[],pm=[];
-  dayHours.forEach(x=>(hourPeriod(x.open)==='pm'?pm:am).push(x));
+  dayHours.forEach(x=>{
+    // 24 小時制下，分組只看實際時間：00:00～11:59 為上午，12:00～23:59 為下午。
+    // 不再使用資料裡可能殘留的 period，避免舊資料把 11:00 錯放到下午。
+    (hourPeriod(x.open)==='pm'?pm:am).push({...x,period:hourPeriod(x.open)});
+  });
   return {am,pm};
 }
 function renderHourRows(day,period,rows){
@@ -376,7 +382,7 @@ function renderHourRows(day,period,rows){
 }
 function renderPeriodEditor(day,period,label,rows){
   return `<div class="period-block">
-    <div class="period-title"><span>${label}</span><button type="button" class="add-hours" onclick="addHoursRow(${day},'${period}')">＋ 時段</button></div>
+    <div class="period-title"><span>${label}</span><button type="button" class="add-hours" data-hours-day="${day}" data-hours-period="${period}" onclick="addHoursRow(Number(this.dataset.hoursDay), this.dataset.hoursPeriod)">＋ 時段</button></div>
     <div id="hours_${day}_${period}" class="hours-list">${renderHourRows(day,period,rows)}</div>
   </div>`;
 }
