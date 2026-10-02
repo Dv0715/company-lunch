@@ -11,17 +11,38 @@
 <body>
 <div class="app">
 <header>
-  <div><h1>🍱 公司午餐</h1><div id="today" class="muted"></div></div>
+  <div>
+    <h1>🍱 公司午餐</h1>
+    <div id="today" class="muted"></div>
+  </div>
+
   <div class="header-actions">
-    <button id="addRestaurantBtn" class="secondary hidden" onclick="openRestaurantForm()">＋ 新增餐廳</button>
-    <button id="editModeBtn" class="primary" onclick="toggleEditMode()">🔐 編輯模式</button>
+    <button id="addRestaurantBtn" class="secondary hidden" onclick="openRestaurantForm()">
+      ＋ 新增餐廳
+    </button>
+    <button id="editModeBtn" class="primary" onclick="toggleEditMode()">
+      🔐 編輯模式
+    </button>
   </div>
 </header>
-<section class="draw-card"><div><div class="draw-title">🎲 今日午餐抽選</div><div id="drawStatus" class="muted">只會從今天有營業的餐廳中抽</div></div><button id="drawBtn" class="draw-button" onclick="drawRestaurant()">🎲 幫我抽！</button></section>
-<section class="search-card"><label>🔎 想吃什麼？</label><input id="search" placeholder="搜尋餐廳、Tag 或小紙條…" oninput="render()"><label class="check"><input type="checkbox" id="openOnly" onchange="render()"> 只顯示今日有營業</label></section>
-<div id="editBanner" class="edit-banner hidden">✏️ 編輯模式已開啟 <button class="secondary" onclick="lockEditMode()">鎖定</button></div>
-<main><div class="section-title"><h2>餐廳列表</h2><span id="count" class="muted"></span></div><div id="restaurantList" class="grid"><div class="empty">載入中…</div></div></main>
+
+<section class="draw-card">
+  <div><div class="draw-title">🎲 今日午餐抽選</div><div id="drawStatus" class="muted">只會從今天有營業的餐廳中抽</div></div>
+  <button id="drawBtn" class="draw-button" onclick="drawRestaurant()">🎲 幫我抽！</button>
+</section>
+
+<section class="search-card">
+  <label>🔎 想吃什麼？</label>
+  <input id="search" placeholder="搜尋餐廳、Tag 或小紙條…" oninput="render()">
+  <label class="check"><input type="checkbox" id="openOnly" onchange="render()"> 只顯示今日有營業</label>
+</section>
+
+<div id="editBanner" class="edit-banner hidden">✏️ 編輯模式已開啟 <button class="secondary" onclick="lockEditMode()">鎖定</button></div><main>
+  <div class="section-title"><h2>餐廳列表</h2><span id="count" class="muted"></span></div>
+  <div id="restaurantList" class="grid"><div class="empty">載入中…</div></div>
+</main>
 </div>
+
 <div id="modal" class="modal hidden"><div class="modal-box"><button class="close" onclick="closeModal()">×</button><div id="modalContent"></div></div></div>
 <script src="app.js"></script>
 </body></html>
