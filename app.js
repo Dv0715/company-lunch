@@ -4,8 +4,26 @@ const dayNames=["日","一","二","三","四","五","六"];
 let restaurants=[];
 let excludedToday={date:new Date().toISOString().slice(0,10),ids:[]};
 let lastDrawId=null;
+let statusFilter="all";
 
-const today=()=>new Date().getDay();
+function nowTaiwan(){
+  const parts=new Intl.DateTimeFormat("en-US",{
+    timeZone:"Asia/Taipei",
+    year:"numeric",month:"2-digit",day:"2-digit",weekday:"short",
+    hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false
+  }).formatToParts(new Date());
+  const get=t=>parts.find(x=>x.type===t)?.value||"0";
+  const weekday={Sun:0,Mon:1,Tue:2,Wed:3,Thu:4,Fri:5,Sat:6}[get("weekday")];
+  let hour=Number(get("hour"));
+  if(hour===24)hour=0;
+  return {
+    day:weekday,
+    minutes:hour*60+Number(get("minute")),
+    seconds:Number(get("second")),
+    date:`${get("year")}-${get("month")}-${get("day")}`
+  };
+}
+const today=()=>nowTaiwan().day;
 const esc=s=>String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]));
 
 function normalizeBusinessHours(r){
@@ -34,11 +52,70 @@ function daySlots(hours,day){
   const x=hours[day]||{am:[],pm:[]};
   return [...(x.am||[]),...(x.pm||[])];
 }
+function minutesToLabel(minutes){
+  const h=Math.floor(minutes/60)%24, m=minutes%60;
+  return `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}`;
+}
+function slotEndMinutes(slot){
+  return timeMinutes(slot.close);
+}
+function getTodaySlots(r){
+  return daySlots(normalizeBusinessHours(r),today())
+    .map(x=>({open:x.open,close:x.close,openMin:timeMinutes(x.open),closeMin:timeMinutes(x.close)}))
+    .filter(x=>x.openMin>=0&&x.closeMin>=0)
+    .sort((a,b)=>a.openMin-b.openMin);
+}
+function getBusinessStatus(r){
+  const now=nowTaiwan();
+  const slots=getTodaySlots(r);
+  if(!slots.length)return {key:"closed",label:"今日公休",className:"closed",icon:"🔴"};
+
+  // 一般午餐店營業時間會在同一天內結束；若遇到跨午夜時段，將結束時間視為隔日。
+  let current=null;
+  for(const slot of slots){
+    const end=slot.closeMin<=slot.openMin ? slot.closeMin+1440 : slot.closeMin;
+    const currentNow=now.minutes < slot.openMin && end>1440 ? now.minutes+1440 : now.minutes;
+    if(currentNow>=slot.openMin && currentNow<end){
+      current={...slot,endMin:end,remaining:end-currentNow};
+      break;
+    }
+  }
+  if(current){
+    const remain=current.remaining;
+    return {
+      key:remain<=30?"closing":"now",
+      label:remain<=30?`⚠️ ${remain} 分鐘後打烊`:"🟢 現在營業中",
+      className:remain<=30?"closing-soon":"open",
+      icon:remain<=30?"⚠️":"🟢",
+      remaining:remain,
+      close:current.close
+    };
+  }
+
+  const next=slots.find(x=>x.openMin>now.minutes);
+  if(next){
+    return {key:"today",label:`🟡 ${next.open} 開始營業`,className:"next-open",icon:"🟡",nextOpen:next.open};
+  }
+  return {key:"ended",label:"⚪ 今日營業結束",className:"ended",icon:"⚪"};
+}
 function isOpen(r){
-  return daySlots(normalizeBusinessHours(r),today()).length>0;
+  return getTodaySlots(r).length>0;
 }
 function formatHours(r,day=today()){
   return daySlots(normalizeBusinessHours(r),day).map(x=>`${esc(x.open)}～${esc(x.close)}`).join('、');
+}
+function matchesStatusFilter(r){
+  const status=getBusinessStatus(r);
+  if(statusFilter==="all")return true;
+  if(statusFilter==="today")return isOpen(r);
+  if(statusFilter==="now")return status.key==="now"||status.key==="closing";
+  if(statusFilter==="closing")return status.key==="closing";
+  return true;
+}
+function setStatusFilter(filter){
+  statusFilter=filter;
+  document.querySelectorAll(".status-filter-btn").forEach(btn=>btn.classList.toggle("active",btn.dataset.statusFilter===filter));
+  render();
 }
 function closeModal(){document.getElementById("modal").classList.add("hidden")}
 function openModal(html){document.getElementById("modalContent").innerHTML=html;document.getElementById("modal").classList.remove("hidden")}
@@ -108,11 +185,11 @@ async function load(){
 }
 
 function render(){
-  document.getElementById("today").textContent=`今天是星期${dayNames[today()]}`;
+  const now=nowTaiwan();
+  document.getElementById("today").textContent=`今天是星期${dayNames[now.day]}　${String(Math.floor(now.minutes/60)).padStart(2,"0")}:${String(now.minutes%60).padStart(2,"0")}`;
   const q=document.getElementById("search").value.trim().toLowerCase();
-  const only=document.getElementById("openOnly").checked;
   const list=restaurants.filter(r=>{
-    if(only&&!isOpen(r))return false;
+    if(!matchesStatusFilter(r))return false;
     return !q||[r.name,r.category,r.address,...(r.tags||[])].join(" ").toLowerCase().includes(q);
   });
   document.getElementById("count").textContent=`${list.length} 間`;
@@ -122,12 +199,17 @@ function render(){
 }
 
 function card(r){
+  const status=getBusinessStatus(r);
+  const todayHours=formatHours(r);
   return `<div class="card">
     ${r.cover_url?`<div class="restaurant-cover"><img src="${esc(r.cover_url)}" alt="${esc(r.name)}封面" onclick="window.open(this.src,'_blank')"></div>`:""}
     <div class="card-body">
       <h3>${esc(r.name)}</h3>
       <div class="muted">${esc(r.category)}</div>
-      <p class="${isOpen(r)?"open":"closed"}">${isOpen(r)?`🟢 今日有營業 ${formatHours(r)}`:"🔴 今日公休"}</p>
+      <p class="business-status ${status.className}">${esc(status.label)}</p>
+      ${status.key==="today"?`<div class="next-hours">今日有營業：${todayHours}</div>`:""}
+      ${status.key==="ended"?`<div class="next-hours">今日：${todayHours}</div>`:""}
+      ${status.key==="closed"?`<div class="next-hours">今日公休</div>`:""}
       <div>${(r.tags||[]).map(t=>`<span class="tag">#${esc(t)}</span>`).join("")}</div>
       <div class="card-actions">
         <button class="secondary" onclick="openRestaurant('${r.id}')">查看店家</button>
@@ -172,7 +254,7 @@ async function openRestaurant(id){
       <p class="muted detail-menu-hint">點圖片可放大查看</p>
     </section>
     <section class="restaurant-detail-info">
-      <p class="${isOpen(r)?"open":"closed"}">${isOpen(r)?"🟢 今日有營業":"🔴 今日公休"}</p>
+      <p class="business-status ${getBusinessStatus(r).className}">${esc(getBusinessStatus(r).label)}</p>
       <p>📅 公休：${(r.closed_days||[]).length?r.closed_days.map(d=>"星期"+dayNames[d]).join("、"):"無固定公休"}</p>
       ${formatHours(r)?`<p>🕐 今日：${formatHours(r)}</p>`:"<p>🕐 今日：休息</p>"}
       ${r.address?`<p>📍 ${esc(r.address)}</p>`:""}
@@ -530,7 +612,8 @@ async function uploadCover(id){
   const {error}=await db.from("restaurants").update({cover_url:url}).eq("id",id);
   if(error){await db.storage.from("menus").remove([path]);if(status)status.textContent=`儲存封面網址失敗：${error.message}`;return}
   if(status)status.textContent="封面已更新。";
-  await load();
+  await setInterval(()=>render(),30000);
+load();
   openRestaurantForm(restaurants.find(r=>r.id===id));
 }
 async function saveThenUploadCover(){
@@ -539,7 +622,8 @@ async function saveThenUploadCover(){
   if(!data.name){alert("請先輸入餐廳名稱");return}
   const {data:created,error}=await db.from("restaurants").insert(data).select().single();
   if(error){alert(error.message);return}
-  await load();
+  await setInterval(()=>render(),30000);
+load();
   const file=document.getElementById("coverFile")?.files?.[0];
   openRestaurantForm(restaurants.find(r=>r.id===created.id));
   if(file) document.getElementById("coverUploadStatus").textContent="餐廳已建立。請重新選取封面後按「上傳／更換封面」。";
@@ -551,7 +635,8 @@ async function removeCover(id){
   if(fileResult.error){alert("刪除封面檔案失敗："+fileResult.error.message);return}
   const {error}=await db.from("restaurants").update({cover_url:null}).eq("id",id);
   if(error){alert("封面檔案已刪除，但資料更新失敗："+error.message);return}
-  await load();
+  await setInterval(()=>render(),30000);
+load();
   openRestaurantForm(restaurants.find(r=>r.id===id));
 }
 
@@ -609,7 +694,8 @@ async function uploadFromRestaurantForm(id){
     if(status)status.textContent=`已上傳 ${success}/${files.length} 張…`;
   }
 
-  await load();
+  await setInterval(()=>render(),30000);
+load();
   openRestaurantForm(restaurants.find(r=>r.id===id));
 }
 
@@ -633,7 +719,8 @@ async function saveThenUploadRestaurant(){
   if(!data.name){alert("請輸入餐廳名稱");return}
   const {data:created,error}=await db.from("restaurants").insert(data).select().single();
   if(error){alert(error.message);return}
-  await load();
+  await setInterval(()=>render(),30000);
+load();
   openRestaurantForm(restaurants.find(r=>r.id===created.id));
   const status=document.getElementById("editUploadStatus");
   if(status)status.textContent="餐廳已建立；請重新選取圖片後按「上傳選取的圖片」。";
@@ -710,4 +797,5 @@ function excludeToday(id){
   document.getElementById("drawResult")?.remove();
   drawRestaurant();
 }
+setInterval(()=>render(),30000);
 load();

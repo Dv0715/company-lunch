@@ -252,3 +252,18 @@
   .period-block{padding:9px}
   .hours-row input[type=text]{min-width:100px}
 }
+
+/* v12：營業狀態篩選與即時營業狀態 */
+.status-filter{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.status-filter-btn{background:#f0eee8;color:#555;border:1px solid transparent;padding:8px 12px;border-radius:999px;font-size:.9rem}
+.status-filter-btn:hover{background:#e8e5de}
+.status-filter-btn.active{background:#333;color:#fff}
+.business-status{margin:9px 0 5px;font-weight:700}
+.business-status.open{color:#318447}
+.business-status.closing-soon{color:#b46b12}
+.business-status.next-open{color:#9b7a18}
+.business-status.ended{color:#888}
+.business-status.closed{color:#b34d4d}
+.next-hours{color:#888;font-size:.84rem;line-height:1.45;margin-bottom:3px}
+@media(max-width:700px){.status-filter{display:grid;grid-template-columns:1fr 1fr;gap:7px}.status-filter-btn{width:100%;padding:9px 7px;font-size:.84rem}}
+@media(max-width:420px){.status-filter{grid-template-columns:1fr}}

@@ -34,7 +34,12 @@
 <section class="search-card">
   <label>🔎 想吃什麼？</label>
   <input id="search" placeholder="搜尋餐廳、Tag 或小紙條…" oninput="render()">
-  <label class="check"><input type="checkbox" id="openOnly" onchange="render()"> 只顯示今日有營業</label>
+  <div class="status-filter" role="group" aria-label="餐廳營業狀態篩選">
+    <button type="button" class="status-filter-btn active" data-status-filter="all" onclick="setStatusFilter('all')">全部</button>
+    <button type="button" class="status-filter-btn" data-status-filter="today" onclick="setStatusFilter('today')">📅 今日營業</button>
+    <button type="button" class="status-filter-btn" data-status-filter="now" onclick="setStatusFilter('now')">🟢 現在營業</button>
+    <button type="button" class="status-filter-btn" data-status-filter="closing" onclick="setStatusFilter('closing')">⚠️ 30分鐘內打烊</button>
+  </div>
 </section>
 
 <div id="editBanner" class="edit-banner hidden">✏️ 編輯模式已開啟 <button class="secondary" onclick="lockEditMode()">鎖定</button></div><main>
