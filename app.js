@@ -113,7 +113,7 @@ function render(){
   const only=document.getElementById("openOnly").checked;
   const list=restaurants.filter(r=>{
     if(only&&!isOpen(r))return false;
-    return !q||[r.name,r.category,r.address,...(r.tags||[])].join(" ").toLowerCase().includes(q);
+    return !q||[r.name,r.category,r.address,...(r.tags||[]),...(r.menu_keywords||[])].join(" ").toLowerCase().includes(q);
   });
   document.getElementById("count").textContent=`${list.length} 間`;
   document.getElementById("restaurantList").innerHTML=list.length
@@ -168,6 +168,9 @@ async function openRestaurant(id){
         <p class="muted">可一次選多張；單張上限 6MB。</p>
         <input type="file" accept="image/*" multiple onchange="addImages('${id}',this.files)">
         <p id="uploadStatus" class="muted"></p>
+        <button type="button" class="secondary" onclick="recognizeMenus('${id}')">🔍 辨識這家菜單</button>
+        <p class="muted">會從菜單照片抓出餐點名稱，確認後才會存入搜尋關鍵字。</p>
+        <div id="ocrResult" class="ocr-result"></div>
       </div>`:""}
       <p class="muted detail-menu-hint">點圖片可放大查看</p>
     </section>
@@ -490,6 +493,14 @@ async function openRestaurantForm(existing=null){
       </div>
       <p id="editUploadStatus" class="muted"></p>
     </div>
+    ${existing?`<div class="ocr-panel">
+      <div class="section-title-row"><div>
+        <h3>🔍 菜單文字辨識</h3>
+        <div class="muted">從已上傳的菜單照片抓餐點名稱；辨識後可以手動勾選，再存入「菜單關鍵字」。</div>
+      </div></div>
+      <button type="button" class="secondary" onclick="recognizeMenus('${existing.id}')">開始辨識菜單</button>
+      <div id="ocrResult" class="ocr-result"></div>
+    </div>`:""}
   </section>`;
 
   openModal(`<div class="edit-form-layout">
@@ -503,6 +514,10 @@ async function openRestaurantForm(existing=null){
       ${renderHoursEditor(r)}
       <div class="form-row"><label>標籤（逗號分隔）</label>
         <input id="fTags" value="${esc((r.tags||[]).join(","))}" placeholder="水餃,便宜,適合一個人">
+      </div>
+      <div class="form-row"><label>🔎 菜單關鍵字</label>
+        <input id="fMenuKeywords" value="${esc((r.menu_keywords||[]).join(","))}" placeholder="辨識後會自動填入，也可以自己修改">
+        <div class="muted">這些關鍵字會參與首頁搜尋，不會取代原本的標籤。</div>
       </div>
       <div class="form-actions">
         <button class="primary" onclick="saveRestaurant('${existing?.id||""}')">儲存資料</button>
@@ -613,6 +628,82 @@ async function uploadFromRestaurantForm(id){
   openRestaurantForm(restaurants.find(r=>r.id===id));
 }
 
+function normalizeOcrText(text){
+  return String(text||'')
+    .replace(/\r/g,'')
+    .replace(/[　\t]+/g,' ')
+    .split('\n')
+    .map(x=>x.trim())
+    .filter(Boolean)
+    .join('\n');
+}
+function suggestMenuKeywords(text){
+  const lines=normalizeOcrText(text).split('\n');
+  const out=[];
+  const bad=/^(菜單|菜單價目表|價目表|menu|tel|電話|地址|營業時間|外送|內用|外帶|本店|歡迎|line|facebook|instagram)$/i;
+  const add=v=>{
+    v=String(v||'').replace(/^[\s•·●○◆◇★☆※#、，。:：;；|/\\]+|[\s•·●○◆◇★☆※#、，。:：;；|/\\]+$/g,'').trim();
+    if(!v||bad.test(v)||v.length<2||v.length>18)return;
+    if(/^\d+(?:[.,]\d+)?$/.test(v))return;
+    if(/^[\W_]+$/u.test(v))return;
+    if(!out.includes(v))out.push(v);
+  };
+  for(const line of lines){
+    let x=line.replace(/\b(?:NT\$|NT|＄|\$)?\s*\d{1,4}(?:[.,]\d{1,2})?\s*(?:元)?\b/g,' ');
+    x=x.replace(/(?:\d{2,4}\s*[-~～]\s*)?\d{2,4}\s*元?$/,'').trim();
+    x.split(/[，,、|｜;；/\\]+/).forEach(part=>{
+      part=part.trim().replace(/\s{2,}/g,' ');
+      if(!part)return;
+      const words=part.split(/\s+/).filter(Boolean);
+      if(words.length>1){
+        // Prefer the text immediately before a price or the whole short phrase.
+        words.forEach(w=>add(w));
+        if(words.join('').length<=18)add(words.join(''));
+      }else add(part);
+    });
+  }
+  // De-duplicate substrings that are clearly contained in a longer candidate.
+  return out.filter((x,i)=>!out.some((y,j)=>i!==j&&y.length>x.length&&y.includes(x)&&x.length>=2));
+}
+async function recognizeMenus(id){
+  if(!requireEdit())return;
+  const box=document.getElementById('ocrResult');
+  if(box)box.innerHTML='<div class="muted">⏳ 正在讀取菜單…第一次使用會下載中文 OCR 模型，可能需要一點時間。</div>';
+  try{
+    if(!window.Tesseract)throw new Error('OCR 元件尚未載入，請重新整理網頁後再試。');
+    const {data:images,error}=await db.from('menu_images').select('*').eq('restaurant_id',id).order('created_at',{ascending:false});
+    if(error)throw error;
+    if(!images?.length){if(box)box.innerHTML='<div class="muted">目前還沒有菜單圖片，請先上傳。</div>';return;}
+    const worker=await Tesseract.createWorker('chi_tra+eng',1,{logger:m=>{
+      if(box&&m.status)box.innerHTML=`<div class="muted">🔍 ${esc(m.status)} ${m.progress?Math.round(m.progress*100)+'%':''}</div>`;
+    }});
+    let allText='';
+    for(let i=0;i<images.length;i++){
+      if(box)box.innerHTML=`<div class="muted">🔍 正在辨識第 ${i+1}/${images.length} 張菜單…</div>`;
+      const res=await worker.recognize(images[i].public_url);
+      allText += '\n' + (res?.data?.text||'');
+    }
+    await worker.terminate();
+    const candidates=suggestMenuKeywords(allText);
+    if(!candidates.length){if(box)box.innerHTML='<div class="muted">沒有抓到適合的餐點關鍵字。可以先檢查圖片是否清楚，或直接手動填寫。</div>';return;}
+    const old=(restaurants.find(r=>r.id===id)?.menu_keywords)||[];
+    const merged=[...new Set([...old,...candidates])];
+    if(box)box.innerHTML=`<div class="ocr-box">\n      <strong>辨識結果（請勾選要保存的）</strong>\n      <div class="ocr-tags">${merged.map((k,i)=>`<label class="ocr-tag"><input type="checkbox" class="ocr-keyword" value="${esc(k)}" ${old.includes(k)?'checked':''}> ${esc(k)}</label>`).join('')}</div>\n      <div class="ocr-actions"><button type="button" class="primary" onclick="saveOcrKeywords('${id}')">保存勾選的關鍵字</button><button type="button" class="secondary" onclick="document.getElementById('ocrResult').innerHTML=''">關閉</button></div>\n      <details><summary>查看 OCR 原文</summary><pre class="ocr-raw">${esc(normalizeOcrText(allText))}</pre></details>\n    </div>`;
+  }catch(e){
+    if(box)box.innerHTML=`<div class="closed">辨識失敗：${esc(e.message||e)}</div>`;
+  }
+}
+async function saveOcrKeywords(id){
+  if(!requireEdit())return;
+  const box=document.getElementById('ocrResult');
+  const values=[...document.querySelectorAll('.ocr-keyword:checked')].map(x=>x.value.trim()).filter(Boolean);
+  const {error}=await db.from('restaurants').update({menu_keywords:[...new Set(values)]}).eq('id',id);
+  if(error){alert('儲存菜單關鍵字失敗：'+error.message);return}
+  const r=restaurants.find(x=>x.id===id); if(r)r.menu_keywords=[...new Set(values)];
+  if(box)box.innerHTML='<div class="open">✅ 菜單關鍵字已保存！現在首頁搜尋也找得到這些餐點。</div>';
+  render();
+}
+
 function collectRestaurantFormData(){
   const business_hours=getHoursFromForm(), closed_days=[];
   for(let d=0;d<7;d++) if(document.getElementById(`closed_${d}`)?.checked) closed_days.push(d);
@@ -624,7 +715,8 @@ function collectRestaurantFormData(){
     phone:document.getElementById("fPhone").value.trim(),
     closed_days,business_hours,
     open_time:allSlots[0]?.open||"", close_time:allSlots[0]?.close||"",
-    tags:document.getElementById("fTags").value.split(",").map(x=>x.trim()).filter(Boolean)
+    tags:document.getElementById("fTags").value.split(",").map(x=>x.trim()).filter(Boolean),
+    menu_keywords:document.getElementById("fMenuKeywords")?.value.split(",").map(x=>x.trim()).filter(Boolean)||[]
   };
 }
 async function saveThenUploadRestaurant(){
@@ -670,7 +762,7 @@ async function deleteRestaurant(id){
 function drawPool(){
   const q=document.getElementById("search").value.trim().toLowerCase();
   return restaurants.filter(r=>isOpen(r)&&!excludedToday.ids.includes(r.id)&&
-    (!q||[r.name,r.category,...(r.tags||[])].join(" ").toLowerCase().includes(q)));
+    (!q||[r.name,r.category,...(r.tags||[]),...(r.menu_keywords||[])].join(" ").toLowerCase().includes(q)));
 }
 function drawRestaurant(){
   const pool=drawPool(),status=document.getElementById("drawStatus"),btn=document.getElementById("drawBtn");

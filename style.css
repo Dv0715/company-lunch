@@ -252,3 +252,7 @@
   .period-block{padding:9px}
   .hours-row input[type=text]{min-width:100px}
 }
+
+
+/* Menu OCR */
+.ocr-panel{margin-top:14px;padding:14px;border:1px solid #e4dfd4;border-radius:14px;background:#faf9f5}.ocr-result{margin-top:12px}.ocr-box{padding:12px;border-radius:12px;background:#fff;border:1px solid #e1ddd4}.ocr-tags{display:flex;flex-wrap:wrap;gap:7px;margin:12px 0}.ocr-tag{background:#f1efe9;border-radius:999px;padding:7px 10px;cursor:pointer}.ocr-tag input{margin-right:4px}.ocr-actions{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}.ocr-raw{max-height:220px;overflow:auto;white-space:pre-wrap;background:#f7f7f7;padding:10px;border-radius:10px;font-size:.82rem}.edit-image-column{min-width:0}.detail-menu-hero .upload-box .secondary{margin-top:8px}
