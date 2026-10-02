@@ -304,10 +304,15 @@ function timeMinutes(v){
 }
 function hourPeriod(open){return timeMinutes(open)>=12?'pm':'am'}
 function getDayHoursFromForm(day){
-  return [...document.querySelectorAll(`.hours-row[data-day="${day}"]`)].map(row=>({
-    open:normalizeTimeValue(row.querySelector('.hour-open')?.value),
-    close:normalizeTimeValue(row.querySelector('.hour-close')?.value)
-  })).filter(x=>x.open&&x.close);
+  const result=[];
+  ['am','pm'].forEach(period=>{
+    document.querySelectorAll(`#hours_${day}_${period} .hours-row`).forEach(row=>{
+      const open=normalizeTimeValue(row.querySelector('.hour-open')?.value);
+      const close=normalizeTimeValue(row.querySelector('.hour-close')?.value);
+      if(open&&close) result.push({open,close,period});
+    });
+  });
+  return result;
 }
 function getHoursFromForm(){
   const out={};
@@ -326,7 +331,7 @@ function addHoursRow(day,period='am',open='',close=''){
   const wrap=document.getElementById(`hours_${day}_${period}`);
   if(!wrap)return;
   const row=document.createElement('div');
-  row.className='hours-row'; row.dataset.day=day;
+  row.className='hours-row'; row.dataset.day=day; row.dataset.period=period;
   row.innerHTML=`<input class="hour-open" type="text" inputmode="numeric" maxlength="5" placeholder="00:00" value="${esc(open)}" onblur="syncTimeInput(this)">
     <span>～</span>
     <input class="hour-close" type="text" inputmode="numeric" maxlength="5" placeholder="00:00" value="${esc(close)}" onblur="syncTimeInput(this)">
@@ -352,7 +357,7 @@ function applyCopyHours(day){
     if(closed){closed.checked=false;toggleDayHours(target)}
     document.getElementById(`hours_${target}_am`).innerHTML='';
     document.getElementById(`hours_${target}_pm`).innerHTML='';
-    source.forEach(x=>addHoursRow(target,hourPeriod(x.open),x.open,x.close));
+    source.forEach(x=>addHoursRow(target,x.period || hourPeriod(x.open),x.open,x.close));
   });
   document.getElementById(`copy_panel_${day}`)?.classList.add('hidden');
 }
@@ -362,7 +367,7 @@ function splitDayHours(dayHours){
   return {am,pm};
 }
 function renderHourRows(day,period,rows){
-  return rows.length?rows.map(x=>`<div class="hours-row" data-day="${day}">
+  return rows.length?rows.map(x=>`<div class="hours-row" data-day="${day}" data-period="${period}">
     <input class="hour-open" type="text" inputmode="numeric" maxlength="5" placeholder="00:00" value="${esc(x.open)}" onblur="syncTimeInput(this)">
     <span>～</span>
     <input class="hour-close" type="text" inputmode="numeric" maxlength="5" placeholder="00:00" value="${esc(x.close)}" onblur="syncTimeInput(this)">
