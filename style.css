@@ -267,3 +267,17 @@
 .next-hours{color:#888;font-size:.84rem;line-height:1.45;margin-bottom:3px}
 @media(max-width:700px){.status-filter{display:grid;grid-template-columns:1fr 1fr;gap:7px}.status-filter-btn{width:100%;padding:9px 7px;font-size:.84rem}}
 @media(max-width:420px){.status-filter{grid-template-columns:1fr}}
+
+/* v13：附近店家／距離篩選 */
+.status-filter,.radius-filter{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}
+.status-filter-btn,.radius-filter-btn{background:#f0eee9;border:1px solid transparent;border-radius:999px;padding:7px 11px;font-size:.9rem}
+.status-filter-btn.active,.radius-filter-btn.active{background:#333;color:#fff}
+.location-filter{margin-top:14px;padding-top:14px;border-top:1px solid #eee8df}
+.location-filter-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.small-btn{padding:7px 10px;font-size:.86rem}
+.distance-badge{display:inline-block;margin:4px 0 2px;background:#edf4ec;color:#47734c;border-radius:999px;padding:4px 8px;font-size:.82rem;font-weight:700}
+.location-editor{padding:12px;border:1px solid #e5e1d9;border-radius:12px;background:#fcfbf8}
+.location-editor-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+.location-coords{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:7px}
+.location-coords input{width:100%;padding:9px;border:1px solid #d8d5cf;border-radius:9px}
+@media(max-width:600px){.location-filter-head{align-items:stretch;flex-direction:column}.location-coords{grid-template-columns:1fr}}

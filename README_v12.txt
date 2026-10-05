@@ -8,3 +8,10 @@
 5. 延續 v11 的每週多時段、上午／下午分組、複製到其他日期、菜單與店家封面功能。
 
 不需要新增 Supabase 欄位或重新跑 SQL。
+
+v13 附近店家功能：
+1. 請先在 Supabase SQL Editor 執行 add_location.sql，為 restaurants 增加 latitude / longitude。
+2. 編輯每家餐廳時，可在店家所在地按「使用目前位置」保存座標；也可手動填緯度／經度。
+3. 網頁使用者可按「取得我的位置」，再選 500m／1km／3km／5km 範圍篩選。
+4. 位置只在使用者瀏覽器當下計算，不會把使用者目前位置寫入 Supabase。
+5. GitHub Pages 的 HTTPS 網址才能正常使用瀏覽器定位；直接用 file:// 開啟時定位可能被瀏覽器限制。

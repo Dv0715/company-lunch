@@ -5,6 +5,8 @@ let restaurants=[];
 let excludedToday={date:new Date().toISOString().slice(0,10),ids:[]};
 let lastDrawId=null;
 let statusFilter="all";
+let radiusFilter="all";
+let userLocation=null;
 
 function nowTaiwan(){
   const parts=new Intl.DateTimeFormat("en-US",{
@@ -117,6 +119,62 @@ function setStatusFilter(filter){
   document.querySelectorAll(".status-filter-btn").forEach(btn=>btn.classList.toggle("active",btn.dataset.statusFilter===filter));
   render();
 }
+
+function setRadiusFilter(filter){
+  radiusFilter=String(filter);
+  document.querySelectorAll(".radius-filter-btn").forEach(btn=>btn.classList.toggle("active",btn.dataset.radiusFilter===radiusFilter));
+  if(radiusFilter!=="all" && !userLocation){
+    requestUserLocation();
+    return;
+  }
+  render();
+}
+function distanceKm(lat1,lon1,lat2,lon2){
+  const toRad=x=>x*Math.PI/180, R=6371;
+  const dLat=toRad(lat2-lat1), dLon=toRad(lon2-lon1);
+  const a=Math.sin(dLat/2)**2+Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+function getRestaurantDistance(r){
+  if(!userLocation || r.latitude==null || r.longitude==null || r.latitude==='' || r.longitude==='') return null;
+  const lat=Number(r.latitude), lon=Number(r.longitude);
+  if(!Number.isFinite(lat)||!Number.isFinite(lon)) return null;
+  return distanceKm(userLocation.lat,userLocation.lon,lat,lon);
+}
+function formatDistance(km){
+  if(km==null)return '';
+  if(km<1)return `${Math.round(km*1000)} m`;
+  return `${km.toFixed(km<10?1:0)} km`;
+}
+function matchesRadiusFilter(r){
+  if(radiusFilter==='all')return true;
+  if(!userLocation)return false;
+  const d=getRestaurantDistance(r);
+  return d!=null && d<=Number(radiusFilter);
+}
+function updateLocationStatus(message){
+  const el=document.getElementById('locationStatus');
+  if(el)el.textContent=message;
+}
+function requestUserLocation(){
+  if(!navigator.geolocation){
+    updateLocationStatus('此瀏覽器不支援定位功能。');
+    return;
+  }
+  const btn=document.getElementById('locationBtn');
+  if(btn){btn.disabled=true;btn.textContent='定位中…';}
+  updateLocationStatus('正在取得目前位置…');
+  navigator.geolocation.getCurrentPosition(pos=>{
+    userLocation={lat:pos.coords.latitude,lon:pos.coords.longitude,accuracy:pos.coords.accuracy};
+    if(btn){btn.disabled=false;btn.textContent='更新我的位置';}
+    updateLocationStatus(`已取得位置（誤差約 ${Math.round(pos.coords.accuracy)}m）。可用距離篩選。`);
+    render();
+  },err=>{
+    if(btn){btn.disabled=false;btn.textContent='取得我的位置';}
+    const msg=err.code===1?'你未允許定位；請在瀏覽器設定中允許此網站使用位置。':err.code===2?'目前無法取得位置，請稍後再試。':'定位逾時，請再試一次。';
+    updateLocationStatus(msg);
+  },{enableHighAccuracy:true,timeout:10000,maximumAge:60000});
+}
 function closeModal(){document.getElementById("modal").classList.add("hidden")}
 function openModal(html){document.getElementById("modalContent").innerHTML=html;document.getElementById("modal").classList.remove("hidden")}
 
@@ -190,6 +248,7 @@ function render(){
   const q=document.getElementById("search").value.trim().toLowerCase();
   const list=restaurants.filter(r=>{
     if(!matchesStatusFilter(r))return false;
+    if(!matchesRadiusFilter(r))return false;
     return !q||[r.name,r.category,r.address,...(r.tags||[])].join(" ").toLowerCase().includes(q);
   });
   document.getElementById("count").textContent=`${list.length} 間`;
@@ -201,12 +260,14 @@ function render(){
 function card(r){
   const status=getBusinessStatus(r);
   const todayHours=formatHours(r);
+  const distance=getRestaurantDistance(r);
   return `<div class="card">
     ${r.cover_url?`<div class="restaurant-cover"><img src="${esc(r.cover_url)}" alt="${esc(r.name)}封面" onclick="window.open(this.src,'_blank')"></div>`:""}
     <div class="card-body">
       <h3>${esc(r.name)}</h3>
       <div class="muted">${esc(r.category)}</div>
       <p class="business-status ${status.className}">${esc(status.label)}</p>
+      ${distance!=null?`<div class="distance-badge">📍 ${formatDistance(distance)}</div>`:""}
       ${status.key==="today"?`<div class="next-hours">今日有營業：${todayHours}</div>`:""}
       ${status.key==="ended"?`<div class="next-hours">今日：${todayHours}</div>`:""}
       ${status.key==="closed"?`<div class="next-hours">今日公休</div>`:""}
@@ -255,6 +316,7 @@ async function openRestaurant(id){
     </section>
     <section class="restaurant-detail-info">
       <p class="business-status ${getBusinessStatus(r).className}">${esc(getBusinessStatus(r).label)}</p>
+      ${getRestaurantDistance(r)!=null?`<p>📍 距離你 ${formatDistance(getRestaurantDistance(r))}</p>`:""}
       <p>📅 公休：${(r.closed_days||[]).length?r.closed_days.map(d=>"星期"+dayNames[d]).join("、"):"無固定公休"}</p>
       ${formatHours(r)?`<p>🕐 今日：${formatHours(r)}</p>`:"<p>🕐 今日：休息</p>"}
       ${r.address?`<p>📍 ${esc(r.address)}</p>`:""}
@@ -529,7 +591,7 @@ function renderHoursEditor(r){
 
 async function openRestaurantForm(existing=null){
   if(!requireEdit())return;
-  const r=existing||{name:"",category:"",address:"",phone:"",closed_days:[],open_time:"",close_time:"",tags:[],business_hours:{}};
+  const r=existing||{name:"",category:"",address:"",phone:"",latitude:null,longitude:null,closed_days:[],open_time:"",close_time:"",tags:[],business_hours:{}};
 
   let images=[];
   if(existing){
@@ -581,6 +643,18 @@ async function openRestaurantForm(existing=null){
       <div class="form-row"><label>類型</label><input id="fCategory" value="${esc(r.category)}" placeholder="便當、麵店、飲料…"></div>
       <div class="form-row"><label>地址</label><input id="fAddress" value="${esc(r.address)}" oninput="checkDuplicateContact('${existing?.id||""}')"></div>
       <div class="form-row"><label>電話</label><input id="fPhone" value="${esc(r.phone)}" oninput="checkDuplicateContact('${existing?.id||""}')"></div>
+      <div class="form-row location-editor">
+        <label>📍 店家位置</label>
+        <div class="location-editor-row">
+          <button type="button" class="secondary" onclick="setRestaurantLocationFromDevice()">使用目前位置</button>
+          <span id="restaurantLocationStatus" class="muted">${r.latitude!=null&&r.longitude!=null?`已設定：${Number(r.latitude).toFixed(6)}, ${Number(r.longitude).toFixed(6)}`:'尚未設定位置'}</span>
+        </div>
+        <div class="location-coords">
+          <input id="fLatitude" type="number" step="any" placeholder="緯度，例如 24.43" value="${esc(r.latitude??'')}">
+          <input id="fLongitude" type="number" step="any" placeholder="經度，例如 118.32" value="${esc(r.longitude??'')}">
+        </div>
+        <div class="muted">在店家所在地按「使用目前位置」，之後才能用附近店家篩選。</div>
+      </div>
       <div id="duplicateWarning" class="duplicate-warning"></div>
       ${renderHoursEditor(r)}
       <div class="form-row"><label>標籤（逗號分隔）</label>
@@ -699,6 +773,22 @@ load();
   openRestaurantForm(restaurants.find(r=>r.id===id));
 }
 
+function setRestaurantLocationFromDevice(){
+  if(!navigator.geolocation){alert('此瀏覽器不支援定位功能。');return}
+  const status=document.getElementById('restaurantLocationStatus');
+  if(status)status.textContent='正在取得位置…';
+  navigator.geolocation.getCurrentPosition(pos=>{
+    const lat=pos.coords.latitude.toFixed(7), lon=pos.coords.longitude.toFixed(7);
+    const latInput=document.getElementById('fLatitude'), lonInput=document.getElementById('fLongitude');
+    if(latInput)latInput.value=lat;
+    if(lonInput)lonInput.value=lon;
+    if(status)status.textContent=`已取得：${lat}, ${lon}`;
+  },err=>{
+    if(status)status.textContent='無法取得位置';
+    alert(err.code===1?'請允許此網站使用位置。':'目前無法取得位置，請再試一次。');
+  },{enableHighAccuracy:true,timeout:10000,maximumAge:0});
+}
+
 function collectRestaurantFormData(){
   const business_hours=getHoursFromForm(), closed_days=[];
   for(let d=0;d<7;d++) if(document.getElementById(`closed_${d}`)?.checked) closed_days.push(d);
@@ -708,6 +798,8 @@ function collectRestaurantFormData(){
     category:document.getElementById("fCategory").value.trim(),
     address:document.getElementById("fAddress").value.trim(),
     phone:document.getElementById("fPhone").value.trim(),
+    latitude:document.getElementById("fLatitude")?.value ? Number(document.getElementById("fLatitude").value) : null,
+    longitude:document.getElementById("fLongitude")?.value ? Number(document.getElementById("fLongitude").value) : null,
     closed_days,business_hours,
     open_time:allSlots[0]?.open||"", close_time:allSlots[0]?.close||"",
     tags:document.getElementById("fTags").value.split(",").map(x=>x.trim()).filter(Boolean)

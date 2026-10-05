@@ -40,6 +40,20 @@
     <button type="button" class="status-filter-btn" data-status-filter="now" onclick="setStatusFilter('now')">🟢 現在營業</button>
     <button type="button" class="status-filter-btn" data-status-filter="closing" onclick="setStatusFilter('closing')">⚠️ 30分鐘內打烊</button>
   </div>
+  <div class="location-filter" aria-label="附近店家篩選">
+    <div class="location-filter-head">
+      <strong>📍 附近店家</strong>
+      <button type="button" class="secondary small-btn" onclick="requestUserLocation()" id="locationBtn">取得我的位置</button>
+    </div>
+    <div class="radius-filter">
+      <button type="button" class="radius-filter-btn active" data-radius-filter="all" onclick="setRadiusFilter('all')">不限距離</button>
+      <button type="button" class="radius-filter-btn" data-radius-filter="0.5" onclick="setRadiusFilter(0.5)">500m</button>
+      <button type="button" class="radius-filter-btn" data-radius-filter="1" onclick="setRadiusFilter(1)">1km</button>
+      <button type="button" class="radius-filter-btn" data-radius-filter="3" onclick="setRadiusFilter(3)">3km</button>
+      <button type="button" class="radius-filter-btn" data-radius-filter="5" onclick="setRadiusFilter(5)">5km</button>
+    </div>
+    <div id="locationStatus" class="muted">先取得目前位置，再選擇距離範圍。</div>
+  </div>
 </section>
 
 <div id="editBanner" class="edit-banner hidden">✏️ 編輯模式已開啟 <button class="secondary" onclick="lockEditMode()">鎖定</button></div><main>
